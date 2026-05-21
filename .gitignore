@@ -53,3 +53,8 @@ Thumbs.db
 
 # Claude code workspace
 .claude/
+
+# Local store / dev DB
+.local/
+*.sqlite
+*.sqlite-journal
