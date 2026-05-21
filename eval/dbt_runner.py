@@ -56,25 +56,45 @@ class DbtRunResult:
     wall_seconds: float
 
 
-def _parse_test_name(test_name: str, depends_on_model: str | None) -> tuple[str, str | None]:
-    """Heuristic. e.g. 'not_null_stg_orders_customer_id' → ('stg_orders', 'customer_id')."""
-    if depends_on_model:
-        # The model is the only `ref` the test depends on; remove the prefix.
-        prefix_options = [
-            f"not_null_{depends_on_model}_",
-            f"unique_{depends_on_model}_",
-            f"accepted_values_{depends_on_model}_",
-            f"relationships_{depends_on_model}_",
-        ]
-        for pref in prefix_options:
+def _parse_test_name(
+    test_name: str, depends_on_models: list[str]
+) -> tuple[str, str | None]:
+    """Parse a dbt-generated test name into (source_model, column).
+
+    Examples:
+      not_null_stg_orders_customer_id              -> (stg_orders, customer_id)
+      unique_stg_orders_order_id                   -> (stg_orders, order_id)
+      relationships_stg_orders_customer_id__customer_id__ref_stg_customers_
+                                                   -> (stg_orders, customer_id)
+
+    For relationships tests, two models appear in `depends_on`: the source
+    (the one whose column owns the FK) and the target (the referenced model).
+    We pick the source by trying every prefix `<test_kind>_<model>_` and
+    accepting the first that matches.
+    """
+    if not depends_on_models:
+        return "?", None
+    kinds = ("not_null", "unique", "accepted_values", "relationships")
+    # Try every (kind, model) combo. Pick the *longest* matching model name
+    # to disambiguate when one is a prefix of another (e.g. `stg` vs
+    # `stg_orders` in a hypothetical project).
+    candidates = []
+    for kind in kinds:
+        for m in depends_on_models:
+            pref = f"{kind}_{m}_"
             if test_name.startswith(pref):
                 rest = test_name[len(pref):]
                 # accepted_values + relationships test names get hashed/truncated
-                # so column extraction may be unreliable — leave best-effort.
+                # after the column — split on '__' to recover just the column.
                 column = rest if "__" not in rest else rest.split("__")[0]
-                return depends_on_model, column or None
-        return depends_on_model, None
-    return "?", None
+                candidates.append((len(m), m, column or None))
+    if candidates:
+        # longest-model match wins
+        candidates.sort(reverse=True)
+        _, model, column = candidates[0]
+        return model, column
+    # Fallback: first model in depends_on, no column.
+    return depends_on_models[0], None
 
 
 def run_dbt(
@@ -154,12 +174,10 @@ def build(project_dir: Path, duckdb_path: Path) -> DbtRunResult:
         node = manifest["nodes"].get(unique_id, {})
         test_name = node.get("name", unique_id.split(".")[-1])
         depends_on = node.get("depends_on", {}).get("nodes", [])
-        ref_model = None
-        for dep in depends_on:
-            if dep.startswith("model."):
-                ref_model = dep.split(".")[-1]
-                break
-        model, column = _parse_test_name(test_name, ref_model)
+        ref_models = [
+            dep.split(".")[-1] for dep in depends_on if dep.startswith("model.")
+        ]
+        model, column = _parse_test_name(test_name, ref_models)
         relation = r.get("relation_name") or node.get("relation_name") or ""
         # relation_name is the failures table when store_failures=true.
         failures_fqn = relation.replace('"', "")

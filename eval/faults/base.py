@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 import duckdb
 
-from dq_triage.models import GroundTruth
+from dq_triage.models import GroundTruth, RootCauseClass
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,10 +28,14 @@ class FaultResult:
 
 
 class Fault(ABC):
-    """Base class. Subclasses set `pattern_id` and implement `apply`."""
+    """Base class. Subclasses set `pattern_id`, `cause_class`, and `apply`."""
 
     #: stable identifier, e.g. "null_spike.flat_5pct"
     pattern_id: str
+
+    #: which `RootCauseClass` this fault represents. Used by the runner to
+    #: build predictions (until the W3 classifier replaces hardcoding).
+    cause_class: RootCauseClass
 
     @abstractmethod
     def apply(

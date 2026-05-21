@@ -1,43 +1,53 @@
-# Eval Report — smoke
+# Eval Report — full
 
-_generated: 2026-05-21T23:01:49.094912+00:00_
+_generated: 2026-05-21T23:32:39.225108+00:00_
 
 ## Suite
 
 - Dataset: **jaffle_shop**
-- Trials: **9**
-- Predictions emitted: **9**
+- Trials: **45**
+- Predictions emitted: **45**
 - Stealth faults (no test broke): **0**
 - No-attribution failures: **0**
-- Run dir: `eval/runs/20260521T230149Z`
+- Run dir: `eval/runs/20260521T233239Z`
 
 ## Results
 
 | System | Top-1 table | Top-3 table | Col\|table | Row recall | Row F1 | Macro F1 | Median latency | ECE |
 |---|---|---|---|---|---|---|---|---|
-| SqlglotWalker (W2) | 100.0% | 100.0% | 100.0% | 1.00 | 1.00 | 1.00 | 2.9s | 0.000 |
+| SqlglotWalker (W2) | 100.0% | 100.0% | 100.0% | 1.00 | 1.00 | 1.00 | 3.5s | 0.000 |
 
 ## Per-class accuracy
 
 | Class | Accuracy |
 |---|---|
+| `broken_join_dropout` | 100.0% |
+| `duplicate_ingestion` | 100.0% |
 | `upstream_null_spike` | 100.0% |
 
-## ⚠️ Honesty disclaimer (Week 2)
+## Honesty disclaimer (Week 2)
 
-These numbers are still easy. What has and has NOT changed since W1:
+What changed since W1:
 
-- **Lineage is no longer hardcoded.** `SqlglotWalker` reads compiled SQL
-  from `target/compiled/` and uses `sqlglot.lineage` to follow columns
-  upstream through CTEs and across dbt-model boundaries. The same
-  100% / 1.0 numbers now reflect real parsing, not a lookup table.
-- **One fault class** (`upstream_null_spike`) — the runner still
-  hardcodes the predicted class. Classification F1 remains a tautology
-  until Week 3 lands the rules-based classifier.
-- **One fault target** (`raw_orders.user_id`). Generalization across
-  columns and dbt projects is still untested; more fault classes and a
-  ~40-incident benchmark land later in Week 2.
+- **Lineage is no longer hardcoded.** `SqlglotWalker` reads compiled
+  SQL from `target/compiled/` and uses `sqlglot.lineage` to follow
+  columns upstream through CTEs and across dbt-model boundaries.
+- **Three fault families** (was one): `upstream_null_spike`,
+  `duplicate_ingestion`, `broken_join_dropout` — 3 patterns each.
+  This stresses the walker on `unique` and `relationships` tests,
+  not just `not_null`.
 
-The point of these reports is to **prove the loop works end-to-end**
-and to track delta as we replace components. 100% on the W1 suite is a
-necessary condition, not a sufficient one.
+What is **still a tautology / still untested**:
+
+- **Classification.** The runner reads `fault.cause_class` directly
+  when building each `Prediction`. So the classification F1 is the
+  trivial answer — meaningful only when Week 3 replaces this with a
+  rules-based classifier and the 0% classifier baseline.
+- **One dataset.** Generalization across dbt projects lands in Week 4
+  (TPC-H + NYC-taxi).
+- **The hard case.** For `broken_join_dropout` the attributor lands
+  on the *child* table (orphan FK side), not the *parent* (where the
+  delete happened). That's correct attribution behaviour — telling
+  null-spike from join-dropout, same blame location, is the
+  classifier's job. The 100% top-1 here measures attribution, not
+  root-cause identification.

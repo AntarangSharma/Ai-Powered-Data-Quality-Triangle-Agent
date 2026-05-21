@@ -31,6 +31,7 @@ def _incident_key(dataset: str, pattern: str, seed: int) -> str:
 class _NullSpikeBase(Fault):
     """Shared mechanic. Subclasses set `fraction` + optional `predicate_sql`."""
 
+    cause_class = RootCauseClass.UPSTREAM_NULL_SPIKE
     fraction: ClassVar[float] = 0.05
     predicate_sql: ClassVar[str | None] = None
 
