@@ -11,8 +11,8 @@ Will be replaced in Week 2 by `attribution/sqlglot_walker.py`. The interface
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 import duckdb
 

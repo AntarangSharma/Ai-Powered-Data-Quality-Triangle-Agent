@@ -18,7 +18,10 @@ dependencies = [
     "dbt-core==1.8.1",
     "dbt-duckdb==1.8.1",
     # lineage
-    "sqlglot[rs]>=23.0,<26",
+    # Plain sqlglot — the `[rs]` extra ships sqlglotrs which has an mypyc/import
+    # incompatibility with current sqlglot wheels (observed 2026-05). Pure-Python
+    # parses are sub-millisecond at our scale.
+    "sqlglot>=25,<26",
     "networkx>=3.2,<4",
     # data
     "pandas>=2.2,<3",

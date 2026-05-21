@@ -13,14 +13,14 @@ from __future__ import annotations
 import argparse
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
 from rich.console import Console
-from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
-from dq_triage.attribution.thin_attributor import ThinAttributor
+from dq_triage.attribution.sqlglot_walker import build_walker
 from dq_triage.models import GroundTruth, RootCauseClass
 from eval import dbt_runner
 from eval.datasets import JAFFLE_SHOP
@@ -104,8 +104,8 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
         except duckdb.CatalogException:
             failing_rows = None
 
-    # 6. Attribute.
-    attributor = ThinAttributor()
+    # 6. Attribute. W2: SQLGlot walker (was ThinAttributor in W1).
+    attributor = build_walker(cfg.dbt_project_dir)
     pk_col = _pk_col_for_model(chosen.model)
     failing_pks: tuple[str, ...] = ()
     if failing_rows is not None and pk_col in failing_rows.columns:
@@ -193,7 +193,7 @@ def run(suite: str, report_path: Path) -> int:
     report = compute(pairs)
 
     # Write artefacts
-    run_dir = report_path.parent / "runs" / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = report_path.parent / "runs" / datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     run_dir.mkdir(parents=True, exist_ok=True)
     write_truths_jsonl(run_dir / "ground_truth.jsonl", truths)
     (run_dir / "diagnostics.txt").write_text("\n".join(repr(d) for d in diag))
@@ -233,7 +233,7 @@ def _render_report(
     )
     return (
         f"# Eval Report — {suite}\n\n"
-        f"_generated: {datetime.now(timezone.utc).isoformat()}_\n\n"
+        f"_generated: {datetime.now(UTC).isoformat()}_\n\n"
         f"## Suite\n\n"
         f"- Dataset: **jaffle_shop**\n"
         f"- Trials: **{n_trials}**\n"
@@ -243,23 +243,24 @@ def _render_report(
         f"- Run dir: `{run_dir.relative_to(Path.cwd()) if run_dir.is_relative_to(Path.cwd()) else run_dir}`\n\n"
         f"## Results\n\n"
         + MetricsReport.markdown_header() + "\n"
-        + report.as_markdown_row("ThinAttributor (W1)") + "\n\n"
+        + report.as_markdown_row("SqlglotWalker (W2)") + "\n\n"
         f"## Per-class accuracy\n\n"
         f"| Class | Accuracy |\n|---|---|\n{per_class_lines}\n\n"
-        "## ⚠️ Honesty disclaimer (Week 1)\n\n"
-        "These numbers are intentionally easy. The Week-1 thin slice has:\n\n"
-        "- **One fault class** (`upstream_null_spike`) — and the runner hardcodes\n"
-        "  the predicted class to match. So the classification F1 is a tautology\n"
+        "## ⚠️ Honesty disclaimer (Week 2)\n\n"
+        "These numbers are still easy. What has and has NOT changed since W1:\n\n"
+        "- **Lineage is no longer hardcoded.** `SqlglotWalker` reads compiled SQL\n"
+        "  from `target/compiled/` and uses `sqlglot.lineage` to follow columns\n"
+        "  upstream through CTEs and across dbt-model boundaries. The same\n"
+        "  100% / 1.0 numbers now reflect real parsing, not a lookup table.\n"
+        "- **One fault class** (`upstream_null_spike`) — the runner still\n"
+        "  hardcodes the predicted class. Classification F1 remains a tautology\n"
         "  until Week 3 lands the rules-based classifier.\n"
-        "- **One fault target** (`raw_orders.user_id`) — the same column in every\n"
-        "  trial. Generalization is untested.\n"
-        "- **Hardcoded lineage map** — `ThinAttributor` knows by hand that\n"
-        "  `stg_orders.customer_id` comes from `raw_orders.user_id`. The real\n"
-        "  SQLGlot walker lands Week 2 and *must* match these numbers without\n"
-        "  the hardcoding to count as progress.\n\n"
-        "The point of Week 1 is to **close the loop end-to-end**:\n"
-        "fault → dbt → failing PKs → attribute → score. The number being 100%\n"
-        "tells us the loop works. It does NOT tell us the agent is good.\n"
+        "- **One fault target** (`raw_orders.user_id`). Generalization across\n"
+        "  columns and dbt projects is still untested; more fault classes and a\n"
+        "  ~40-incident benchmark land later in Week 2.\n\n"
+        "The point of these reports is to **prove the loop works end-to-end**\n"
+        "and to track delta as we replace components. 100% on the W1 suite is a\n"
+        "necessary condition, not a sufficient one.\n"
     )
 
 
