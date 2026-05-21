@@ -1,0 +1,37 @@
+name: eval-smoke
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "eval/**"
+      - "pipelines/**"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DQ_LLM_CACHE_DIR: .llm_cache_ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - name: Cache LLM responses
+        uses: actions/cache@v4
+        with:
+          path: .llm_cache_ci
+          key: llm-cache-${{ runner.os }}-${{ hashFiles('src/**/*.py') }}
+          restore-keys: |
+            llm-cache-${{ runner.os }}-
+      - name: Run smoke eval
+        run: make eval-smoke
+      - name: Post results
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: eval/REPORT_smoke.md

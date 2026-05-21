@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# venvs
+.venv/
+venv/
+env/
+
+# tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# secrets + local config
+.env
+.env.local
+*.secret
+
+# LLM cache (large, content-hashed → not reproducible across machines anyway)
+.llm_cache/
+cache_key_manifest.json
+
+# dbt + DuckDB artifacts
+**/target/
+**/dbt_packages/
+**/logs/
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+
+# eval artifacts
+eval/runs/
+eval/REPORT_*.md
+!eval/REPORT.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Claude code workspace
+.claude/
