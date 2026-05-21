@@ -1,0 +1,29 @@
+name: jaffle_shop
+version: "1.0.0"
+config-version: 2
+profile: jaffle_shop
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+flags:
+  send_anonymous_usage_stats: false
+  use_colors: true
+
+models:
+  jaffle_shop:
+    +materialized: table
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts
+
+tests:
+  +store_failures: true
+  +store_failures_as: table
+  +schema: dbt_test_failures

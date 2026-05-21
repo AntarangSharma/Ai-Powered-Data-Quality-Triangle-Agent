@@ -1,0 +1,20 @@
+version: 2
+models:
+  - name: orders
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('customers')
+              field: customer_id
+      - name: amount
+        tests: [not_null]
+  - name: customers
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: number_of_orders
+        tests: [not_null]

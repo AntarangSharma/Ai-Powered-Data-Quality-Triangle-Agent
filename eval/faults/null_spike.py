@@ -1,10 +1,13 @@
-"""Null-spike faults: introduce NULLs into an upstream column to violate a
-downstream `not_null` test.
+"""Null-spike faults: introduce NULLs into a column to break a downstream
+`not_null` (or `relationships`) test.
 
-Three patterns (per the v1 plan §2.3):
+Three patterns:
   1. flat_5pct       — flip 5% of values to NULL at random
   2. heavy_30pct     — flip 30% of values to NULL (catastrophic)
-  3. conditional     — flip only rows matching a predicate (subtle, harder)
+  3. conditional     — flip only rows matching a predicate (subtler)
+
+A fault is bound at construction time to a `FaultTarget` from the dataset
+config — so the same code drives Jaffle Shop, TPC-H, NYC-taxi, etc.
 """
 
 from __future__ import annotations
@@ -12,11 +15,12 @@ from __future__ import annotations
 import hashlib
 import random
 from datetime import datetime, timezone
-from typing import Final
+from typing import ClassVar
 
 import duckdb
 
 from dq_triage.models import GroundTruth, RootCauseClass
+from eval.datasets.jaffle_shop import FaultTarget
 from eval.faults.base import Fault, FaultResult
 
 
@@ -25,49 +29,45 @@ def _incident_key(dataset: str, pattern: str, seed: int) -> str:
 
 
 class _NullSpikeBase(Fault):
-    """Shared machinery — subclasses set fraction + selector SQL."""
+    """Shared mechanic. Subclasses set `fraction` + optional `predicate_sql`."""
 
-    fraction: float = 0.05
-    predicate_sql: str | None = None  # extra WHERE clause; None means no filter
-    target_table: Final[str] = "raw_customers"
-    target_column: Final[str] = "c_nationkey"
-    pk_column: Final[str] = "c_custkey"
+    fraction: ClassVar[float] = 0.05
+    predicate_sql: ClassVar[str | None] = None
+
+    def __init__(self, target: FaultTarget) -> None:
+        self.target = target
 
     def apply(
         self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int
     ) -> FaultResult:
         rng = random.Random(seed)
-        # Sample PKs to flip.
+        t = self.target
         where = f"WHERE {self.predicate_sql}" if self.predicate_sql else ""
-        candidate_pks = [
-            row[0]
-            for row in con.execute(
-                f"SELECT {self.pk_column} FROM {self.target_table} {where}"
-            ).fetchall()
-        ]
+        rows = con.execute(
+            f"SELECT {t.pk_column} FROM {t.raw_table} {where}"
+        ).fetchall()
+        candidate_pks = [r[0] for r in rows]
         if not candidate_pks:
             raise RuntimeError(
                 f"Fault {self.pattern_id}: no candidate rows for "
-                f"{self.target_table}.{self.target_column}"
+                f"{t.raw_table}.{t.column}"
             )
         n_flip = max(1, int(len(candidate_pks) * self.fraction))
         chosen = rng.sample(candidate_pks, n_flip)
 
-        # Apply mutation in a single UPDATE.
         placeholders = ",".join(["?"] * len(chosen))
         con.execute(
-            f"UPDATE {self.target_table} "
-            f"SET {self.target_column} = NULL "
-            f"WHERE {self.pk_column} IN ({placeholders})",
+            f"UPDATE {t.raw_table} SET {t.column} = NULL "
+            f"WHERE {t.pk_column} IN ({placeholders})",
             chosen,
         )
 
         gt = GroundTruth(
             incident_key=_incident_key(dataset_name, self.pattern_id, seed),
             cause_class=RootCauseClass.UPSTREAM_NULL_SPIKE,
-            source_table=self.target_table,
-            source_column=self.target_column,
-            offending_row_pks=tuple(str(pk) for pk in chosen),
+            source_table=t.raw_table,
+            source_column=t.column,
+            offending_row_pks=tuple(str(pk) for pk in sorted(chosen)),
             injected_at=datetime.now(timezone.utc),
             fault_pattern=self.pattern_id,
         )
@@ -85,15 +85,12 @@ class NullSpikeHeavy30pct(_NullSpikeBase):
 
 
 class NullSpikeConditional(_NullSpikeBase):
-    """Flip ~10% but only from rows in a specific market segment — subtler,
-    because the null pattern correlates with another column."""
-
-    pattern_id = "null_spike.conditional"
-    fraction = 0.10
-    predicate_sql = "c_mktsegment = 'AUTOMOBILE'"
+    pattern_id = "null_spike.conditional_status_returned"
+    fraction = 0.50
+    predicate_sql = "status = 'returned'"
 
 
-ALL_NULL_SPIKE_PATTERNS: Final[list[type[Fault]]] = [
+ALL_NULL_SPIKE_PATTERNS = [
     NullSpikeFlat5pct,
     NullSpikeHeavy30pct,
     NullSpikeConditional,
