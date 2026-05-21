@@ -22,8 +22,10 @@ import duckdb
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
+from dq_triage.agent.evidence import assemble_evidence
 from dq_triage.attribution.manifest import Manifest
 from dq_triage.attribution.sqlglot_walker import build_walker
+from dq_triage.classification import Classifier
 from dq_triage.models import GroundTruth
 from eval import dbt_runner
 from eval.datasets import JAFFLE_SHOP
@@ -201,22 +203,68 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
             failing_pk_column=pk_col,
         )
 
-    # 7. Build Prediction. W2: cause_class is read from the fault itself.
-    #    This is *still a tautology* for classification — the W3 classifier
-    #    will replace this line with rule-based scoring over upstream stats.
+    # 6.5. Resolve the raw-side parent for relationships tests so the
+    #      classifier can probe orphan FKs / parent row counts.
+    parent_raw_table: str | None = None
+    parent_raw_column: str | None = None
+    if (
+        chosen.kind == "relationships"
+        and chosen.parent_model
+        and chosen.parent_column
+    ):
+        parent_pk_col_for_walk = _pk_col_for_model(chosen.parent_model)
+        with duckdb.connect(str(duckdb_path), read_only=True) as con:
+            parent_blame = attributor.attribute(
+                con,
+                failing_model=chosen.parent_model,
+                failing_column=chosen.parent_column,
+                failing_pks=(),
+                failing_pk_column=parent_pk_col_for_walk,
+            )
+        parent_raw_table = parent_blame.model
+        parent_raw_column = parent_blame.column or _pk_col_for_model(
+            parent_blame.model
+        )
+
+    # 6.6. Probe upstream stats → ClassifierEvidence (W3).
+    with duckdb.connect(str(duckdb_path), read_only=True) as con:
+        evidence = assemble_evidence(
+            con,
+            failing_test_kind=chosen.kind,
+            failing_model=chosen.model,
+            failing_column=chosen.column,
+            blame_model=blame.model,
+            blame_column=blame.column,
+            blame_pk_column=_pk_col_for_model(blame.model),
+            parent_table=parent_raw_table,
+            parent_pk_column=parent_raw_column,
+        )
+
+    # 6.7. Classify. W3: rules-only (no LLM tiebreaker until #3/#4 ship).
+    class_scores = Classifier().classify(evidence)
+    top_score = class_scores[0]
+
+    # 7. Build Prediction. W3: cause_class is the classifier's top-1 — the
+    #    tautology of W2 (reading fault.cause_class) is gone.
     prediction = Prediction(
         incident_key=gt.incident_key,
         candidate_tables=(blame.model,),
         blame_column=blame.column,
         blame_row_pks=frozenset(blame.row_pks),
-        cause_class=trial.fault.cause_class,
-        confidence=blame.certainty,
+        cause_class=top_score.cause_class,
+        confidence=top_score.score,
         latency_seconds=build_seconds,
     )
     return gt, prediction, {
         "chosen_test": chosen.test_name,
         "n_failing_pks": len(failing_pks),
         "build_s": build_seconds,
+        "predicted_class": top_score.cause_class.value,
+        "predicted_score": round(top_score.score, 3),
+        "true_class": trial.fault.cause_class.value,
+        "evidence_null_rate": round(evidence.blame_null_rate, 4),
+        "evidence_dupe_count": evidence.blame_pk_dupe_count,
+        "evidence_orphan_fk_count": evidence.orphan_fk_count,
     }
 
 
@@ -326,31 +374,36 @@ def _render_report(
         f"- Run dir: `{run_dir.relative_to(Path.cwd()) if run_dir.is_relative_to(Path.cwd()) else run_dir}`\n\n"
         f"## Results\n\n"
         + MetricsReport.markdown_header() + "\n"
-        + report.as_markdown_row("SqlglotWalker (W2)") + "\n\n"
+        + report.as_markdown_row("SqlglotWalker + RulesClassifier (W3)") + "\n\n"
         f"## Per-class accuracy\n\n"
         f"| Class | Accuracy |\n|---|---|\n{per_class_lines}\n\n"
-        "## Honesty disclaimer (Week 2)\n\n"
-        "What changed since W1:\n\n"
-        "- **Lineage is no longer hardcoded.** `SqlglotWalker` reads compiled\n"
-        "  SQL from `target/compiled/` and uses `sqlglot.lineage` to follow\n"
-        "  columns upstream through CTEs and across dbt-model boundaries.\n"
-        "- **Three fault families** (was one): `upstream_null_spike`,\n"
-        "  `duplicate_ingestion`, `broken_join_dropout` — 3 patterns each.\n"
-        "  This stresses the walker on `unique` and `relationships` tests,\n"
-        "  not just `not_null`.\n\n"
-        "What is **still a tautology / still untested**:\n\n"
-        "- **Classification.** The runner reads `fault.cause_class` directly\n"
-        "  when building each `Prediction`. So the classification F1 is the\n"
-        "  trivial answer — meaningful only when Week 3 replaces this with a\n"
-        "  rules-based classifier and the 0% classifier baseline.\n"
-        "- **One dataset.** Generalization across dbt projects lands in Week 4\n"
-        "  (TPC-H + NYC-taxi).\n"
-        "- **The hard case.** For `broken_join_dropout` the attributor lands\n"
-        "  on the *child* table (orphan FK side), not the *parent* (where the\n"
-        "  delete happened). That's correct attribution behaviour — telling\n"
-        "  null-spike from join-dropout, same blame location, is the\n"
-        "  classifier's job. The 100% top-1 here measures attribution, not\n"
-        "  root-cause identification.\n"
+        "## Honesty disclaimer (Week 3)\n\n"
+        "What changed since W2:\n\n"
+        "- **Classification is no longer tautological.** The runner now\n"
+        "  builds a `ClassifierEvidence` by probing the warehouse with\n"
+        "  `dq_triage.stats.probes` (null rate, dupe count, orphan FK\n"
+        "  count) and ranks `RootCauseClass` candidates with three\n"
+        "  deterministic rule detectors (`dq_triage.classification.rules`).\n"
+        "  No LLM in the loop. The `cause_class` reported here is the\n"
+        "  classifier's top-1 — same number that any external user would\n"
+        "  see if they ran `dq-triage triage`.\n"
+        "- **The broken_join_dropout disambiguation works**: same blame\n"
+        "  location as null-spike on `raw_orders.user_id`, but the rules\n"
+        "  call it correctly by probing for orphan FKs against\n"
+        "  `raw_customers`.\n\n"
+        "What is **still untested**:\n\n"
+        "- **LLM tiebreaker.** `Classifier(tiebreaker=…)` is wired but no\n"
+        "  Anthropic Haiku detector is plugged in yet — runs at zero API\n"
+        "  cost. When classifier confidence is ≥ 0.7 with a clear top-1\n"
+        "  (which is every trial in the current suite), the tiebreaker\n"
+        "  wouldn't fire anyway.\n"
+        "- **Only three of ten cause classes have detectors.** The rules\n"
+        "  module covers `upstream_null_spike`, `duplicate_ingestion`,\n"
+        "  `broken_join_dropout` — the fault classes we actually inject.\n"
+        "  Adding `type_coercion`, `late_arriving`, etc. is a 1-detector-\n"
+        "  per-fault increment.\n"
+        "- **One dataset.** Generalization across dbt projects lands in\n"
+        "  Week 4 (TPC-H + NYC-taxi).\n"
     )
 
 

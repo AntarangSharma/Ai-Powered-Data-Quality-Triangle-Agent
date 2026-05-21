@@ -46,6 +46,9 @@ class TestFailure:
     model: str  # e.g. "stg_orders"
     column: str | None  # e.g. "customer_id"
     failures_table_fqn: str  # e.g. "main_dbt_test_failures.not_null_stg_orders_customer_id"
+    kind: str = "unknown"  # not_null | unique | accepted_values | relationships
+    parent_model: str | None = None  # relationships test target
+    parent_column: str | None = None  # relationships test target field
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +181,27 @@ def build(project_dir: Path, duckdb_path: Path) -> DbtRunResult:
             dep.split(".")[-1] for dep in depends_on if dep.startswith("model.")
         ]
         model, column = _parse_test_name(test_name, ref_models)
+        # Test kind = first token of the test name (matches dbt's generic
+        # test naming convention).
+        kind = "unknown"
+        for k in ("not_null", "unique", "accepted_values", "relationships"):
+            if test_name.startswith(f"{k}_"):
+                kind = k
+                break
+        # Relationships tests carry the parent (`to:`) ref. Read it from the
+        # manifest's test_metadata so we don't depend on the (hash-truncated)
+        # test name.
+        parent_model: str | None = None
+        parent_column: str | None = None
+        if kind == "relationships":
+            # Parent model = the depends_on ref that isn't the source.
+            for m in ref_models:
+                if m != model:
+                    parent_model = m
+                    break
+            tm = node.get("test_metadata") or {}
+            kwargs = tm.get("kwargs") or {}
+            parent_column = kwargs.get("field") or column
         relation = r.get("relation_name") or node.get("relation_name") or ""
         # relation_name is the failures table when store_failures=true.
         failures_fqn = relation.replace('"', "")
@@ -187,6 +211,9 @@ def build(project_dir: Path, duckdb_path: Path) -> DbtRunResult:
                 model=model,
                 column=column,
                 failures_table_fqn=failures_fqn,
+                kind=kind,
+                parent_model=parent_model,
+                parent_column=parent_column,
             )
         )
 
