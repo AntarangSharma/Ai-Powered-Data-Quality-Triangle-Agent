@@ -118,9 +118,7 @@ def probe_row_count(con: duckdb.DuckDBPyConnection, table: str) -> int:
     return int(n)
 
 
-def probe_column_dtype(
-    con: duckdb.DuckDBPyConnection, table: str, column: str
-) -> str:
+def probe_column_dtype(con: duckdb.DuckDBPyConnection, table: str, column: str) -> str:
     """DuckDB-reported SQL type for `table.column`.
 
     Uses `information_schema.columns`. Schema-qualified tables are split.
@@ -152,9 +150,7 @@ def probe_column_dtype(
     return str(row[0])
 
 
-def probe_column_stats(
-    con: duckdb.DuckDBPyConnection, table: str, column: str
-) -> ColumnStats:
+def probe_column_stats(con: duckdb.DuckDBPyConnection, table: str, column: str) -> ColumnStats:
     """Compute row_count, null_count, distinct_count, dtype for `table.column`
     in one SQL round-trip (plus one for dtype via info schema)."""
     rel = _quote_relation(table)

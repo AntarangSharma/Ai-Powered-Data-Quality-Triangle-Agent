@@ -33,16 +33,14 @@ class RootCauseClass(StrEnum):
     UNKNOWN = "unknown"
 
 
-TransformType = Literal[
-    "DIRECT", "CAST", "AGG", "JOIN_KEY", "CASE", "UDF", "WINDOW", "OPAQUE"
-]
+TransformType = Literal["DIRECT", "CAST", "AGG", "JOIN_KEY", "CASE", "UDF", "WINDOW", "OPAQUE"]
 
 
 class Verdict(StrEnum):
     """How the agent chose to report the incident."""
 
     AUTO = "auto"  # confidence ≥ 0.85, single top class
-    TWO_CANDIDATE = "two_candidate"  # 0.6–0.85 or top-2 close
+    TWO_CANDIDATE = "two_candidate"  # 0.6-0.85 or top-2 close
     TRIAGE_ONLY = "triage_only"  # < 0.6, surface evidence, no verdict
 
 

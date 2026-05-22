@@ -17,10 +17,32 @@ from pathlib import Path
 SEEDS_DIR = Path(__file__).resolve().parent.parent / "pipelines" / "jaffle_shop" / "seeds"
 
 FIRST_NAMES = [
-    "Alice", "Bob", "Carol", "David", "Eve", "Frank", "Grace", "Hank",
-    "Ivy", "Jack", "Kira", "Leo", "Mara", "Noah", "Olive", "Paul",
-    "Quinn", "Rose", "Sam", "Tara", "Uma", "Victor", "Wendy", "Xander",
-    "Yara", "Zane",
+    "Alice",
+    "Bob",
+    "Carol",
+    "David",
+    "Eve",
+    "Frank",
+    "Grace",
+    "Hank",
+    "Ivy",
+    "Jack",
+    "Kira",
+    "Leo",
+    "Mara",
+    "Noah",
+    "Olive",
+    "Paul",
+    "Quinn",
+    "Rose",
+    "Sam",
+    "Tara",
+    "Uma",
+    "Victor",
+    "Wendy",
+    "Xander",
+    "Yara",
+    "Zane",
 ]
 LAST_INITIALS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 STATUSES = ["placed", "shipped", "completed", "returned", "return_pending"]

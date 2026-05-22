@@ -59,9 +59,7 @@ class DbtRunResult:
     wall_seconds: float
 
 
-def _parse_test_name(
-    test_name: str, depends_on_models: list[str]
-) -> tuple[str, str | None]:
+def _parse_test_name(test_name: str, depends_on_models: list[str]) -> tuple[str, str | None]:
     """Parse a dbt-generated test name into (source_model, column).
 
     Examples:
@@ -86,7 +84,7 @@ def _parse_test_name(
         for m in depends_on_models:
             pref = f"{kind}_{m}_"
             if test_name.startswith(pref):
-                rest = test_name[len(pref):]
+                rest = test_name[len(pref) :]
                 # accepted_values + relationships test names get hashed/truncated
                 # after the column — split on '__' to recover just the column.
                 column = rest if "__" not in rest else rest.split("__")[0]
@@ -94,8 +92,8 @@ def _parse_test_name(
     if candidates:
         # longest-model match wins
         candidates.sort(reverse=True)
-        _, model, column = candidates[0]
-        return model, column
+        _, model, picked_column = candidates[0]
+        return model, picked_column
     # Fallback: first model in depends_on, no column.
     return depends_on_models[0], None
 
@@ -177,9 +175,7 @@ def build(project_dir: Path, duckdb_path: Path) -> DbtRunResult:
         node = manifest["nodes"].get(unique_id, {})
         test_name = node.get("name", unique_id.split(".")[-1])
         depends_on = node.get("depends_on", {}).get("nodes", [])
-        ref_models = [
-            dep.split(".")[-1] for dep in depends_on if dep.startswith("model.")
-        ]
+        ref_models = [dep.split(".")[-1] for dep in depends_on if dep.startswith("model.")]
         model, column = _parse_test_name(test_name, ref_models)
         # Test kind = first token of the test name (matches dbt's generic
         # test naming convention).

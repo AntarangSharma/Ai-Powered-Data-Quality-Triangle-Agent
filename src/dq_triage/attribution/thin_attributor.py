@@ -35,43 +35,61 @@ class HardcodedLineage:
 JAFFLE_LINEAGE: Mapping[tuple[str, str], HardcodedLineage] = {
     # stg_customers ← raw_customers
     ("stg_customers", "customer_id"): HardcodedLineage(
-        upstream_model="raw_customers", upstream_column="id",
-        downstream_pk="customer_id", upstream_pk="id",
+        upstream_model="raw_customers",
+        upstream_column="id",
+        downstream_pk="customer_id",
+        upstream_pk="id",
     ),
     # stg_orders ← raw_orders
     ("stg_orders", "order_id"): HardcodedLineage(
-        upstream_model="raw_orders", upstream_column="id",
-        downstream_pk="order_id", upstream_pk="id",
+        upstream_model="raw_orders",
+        upstream_column="id",
+        downstream_pk="order_id",
+        upstream_pk="id",
     ),
     ("stg_orders", "customer_id"): HardcodedLineage(
-        upstream_model="raw_orders", upstream_column="user_id",
-        downstream_pk="order_id", upstream_pk="id",
+        upstream_model="raw_orders",
+        upstream_column="user_id",
+        downstream_pk="order_id",
+        upstream_pk="id",
     ),
     ("stg_orders", "status"): HardcodedLineage(
-        upstream_model="raw_orders", upstream_column="status",
-        downstream_pk="order_id", upstream_pk="id",
+        upstream_model="raw_orders",
+        upstream_column="status",
+        downstream_pk="order_id",
+        upstream_pk="id",
     ),
     # stg_payments ← raw_payments
     ("stg_payments", "payment_id"): HardcodedLineage(
-        upstream_model="raw_payments", upstream_column="id",
-        downstream_pk="payment_id", upstream_pk="id",
+        upstream_model="raw_payments",
+        upstream_column="id",
+        downstream_pk="payment_id",
+        upstream_pk="id",
     ),
     ("stg_payments", "order_id"): HardcodedLineage(
-        upstream_model="raw_payments", upstream_column="order_id",
-        downstream_pk="payment_id", upstream_pk="id",
+        upstream_model="raw_payments",
+        upstream_column="order_id",
+        downstream_pk="payment_id",
+        upstream_pk="id",
     ),
     ("stg_payments", "amount"): HardcodedLineage(
-        upstream_model="raw_payments", upstream_column="amount",
-        downstream_pk="payment_id", upstream_pk="id",
+        upstream_model="raw_payments",
+        upstream_column="amount",
+        downstream_pk="payment_id",
+        upstream_pk="id",
     ),
     # marts.orders ← stg_orders (1:1 in row identity for these cols)
     ("orders", "order_id"): HardcodedLineage(
-        upstream_model="stg_orders", upstream_column="order_id",
-        downstream_pk="order_id", upstream_pk="order_id",
+        upstream_model="stg_orders",
+        upstream_column="order_id",
+        downstream_pk="order_id",
+        upstream_pk="order_id",
     ),
     ("orders", "customer_id"): HardcodedLineage(
-        upstream_model="stg_orders", upstream_column="customer_id",
-        downstream_pk="order_id", upstream_pk="order_id",
+        upstream_model="stg_orders",
+        upstream_column="customer_id",
+        downstream_pk="order_id",
+        upstream_pk="order_id",
     ),
 }
 
@@ -106,9 +124,9 @@ class ThinAttributor:
         failing_pk_column: str,
     ) -> BlameLocation:
         """Walk upstream until we either:
-          - reach a node not in the lineage map (assume it's source-level), or
-          - reach `max_hops`,
-          - or lose row identity.
+        - reach a node not in the lineage map (assume it's source-level), or
+        - reach `max_hops`,
+        - or lose row identity.
         """
         model, column = failing_model, failing_column
         pks = list(failing_pks)

@@ -49,12 +49,8 @@ def upgrade() -> None:
         sa.Column("human_label", sa.String(length=64), nullable=True),
         sa.Column("payload", sa.JSON(), nullable=False),
     )
-    op.create_index(
-        "ix_incidents_created_at", "incidents", ["created_at"], unique=False
-    )
-    op.create_index(
-        "ix_incidents_failing_model", "incidents", ["failing_model"], unique=False
-    )
+    op.create_index("ix_incidents_created_at", "incidents", ["created_at"], unique=False)
+    op.create_index("ix_incidents_failing_model", "incidents", ["failing_model"], unique=False)
     op.create_index(
         "ix_incidents_final_cause_class",
         "incidents",
@@ -70,9 +66,7 @@ def upgrade() -> None:
         sa.Column("source_column", sa.String(length=128), nullable=True),
         sa.Column("fault_pattern", sa.String(length=128), nullable=False),
         sa.Column("injected_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "notes", sa.Text(), nullable=False, server_default=sa.text("''")
-        ),
+        sa.Column("notes", sa.Text(), nullable=False, server_default=sa.text("''")),
         sa.Column("payload", sa.JSON(), nullable=False),
     )
     op.create_index(

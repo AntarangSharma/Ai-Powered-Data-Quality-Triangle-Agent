@@ -19,6 +19,7 @@ can decide what "no signal" means.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import duckdb
@@ -59,7 +60,7 @@ class ClassifierEvidence:
     orphan_fk_count: int = 0
 
 
-def _safe_int(fn, default: int = 0) -> int:
+def _safe_int(fn: Callable[[], int | float], default: int = 0) -> int:
     try:
         return int(fn())
     except Exception:
@@ -102,14 +103,10 @@ def assemble_evidence(
 
     parent_row_count: int | None = None
     orphan_fk_count = 0
-    if (
-        failing_test_kind == "relationships"
-        and parent_table
-        and parent_pk_column
-        and blame_column
-    ):
+    if failing_test_kind == "relationships" and parent_table and parent_pk_column and blame_column:
         parent_row_count = _safe_int(
-            lambda: probe_row_count(con, parent_table), default=0  # type: ignore[arg-type]
+            lambda: probe_row_count(con, parent_table),
+            default=0,
         )
         try:
             # Validated identifiers (same regex used by stats.probes).

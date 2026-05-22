@@ -21,9 +21,7 @@ from dq_triage.agent.evidence import ClassifierEvidence
 from dq_triage.classification.rules import ALL_DETECTORS, Detector
 from dq_triage.models import ClassScore, RootCauseClass
 
-Tiebreaker = Callable[
-    [ClassifierEvidence, tuple[ClassScore, ...]], tuple[ClassScore, ...]
-]
+Tiebreaker = Callable[[ClassifierEvidence, tuple[ClassScore, ...]], tuple[ClassScore, ...]]
 
 LOW_CONFIDENCE = 0.7
 CLOSE_RACE = 0.1
@@ -70,10 +68,7 @@ class Classifier:
             return True
         if ranked[0].score < LOW_CONFIDENCE:
             return True
-        return (
-            len(ranked) >= 2
-            and (ranked[0].score - ranked[1].score) < CLOSE_RACE
-        )
+        return len(ranked) >= 2 and (ranked[0].score - ranked[1].score) < CLOSE_RACE
 
 
 def classify(evidence: ClassifierEvidence) -> tuple[ClassScore, ...]:

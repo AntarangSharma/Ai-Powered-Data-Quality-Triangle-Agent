@@ -43,8 +43,7 @@ class Manifest:
         path = project_dir / "target" / "manifest.json"
         if not path.exists():
             raise FileNotFoundError(
-                f"manifest.json not found at {path}. "
-                f"Run `dbt parse` or `dbt run` first."
+                f"manifest.json not found at {path}. Run `dbt parse` or `dbt run` first."
             )
         with path.open() as fh:
             self._raw = json.load(fh)

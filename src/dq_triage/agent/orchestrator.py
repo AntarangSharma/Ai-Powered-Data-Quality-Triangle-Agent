@@ -42,7 +42,7 @@ from pathlib import Path
 
 import duckdb
 
-from dq_triage.agent.evidence import assemble_evidence
+from dq_triage.agent.evidence import ClassifierEvidence, assemble_evidence
 from dq_triage.attribution.manifest import Manifest
 from dq_triage.attribution.sqlglot_walker import build_walker
 from dq_triage.classification import Classifier
@@ -107,9 +107,7 @@ def load_failing_tests(project_dir: Path) -> list[FailingTest]:
         node = manifest["nodes"].get(unique_id, {})
         test_name = node.get("name", unique_id.split(".")[-1])
         depends_on = node.get("depends_on", {}).get("nodes", [])
-        ref_models = [
-            d.split(".")[-1] for d in depends_on if d.startswith("model.")
-        ]
+        ref_models = [d.split(".")[-1] for d in depends_on if d.startswith("model.")]
         kind = "unknown"
         for k in ("not_null", "unique", "accepted_values", "relationships"):
             if test_name.startswith(f"{k}_"):
@@ -152,13 +150,13 @@ def _parse_test_name(
     for m in depends_on_models:
         pref = f"{kind}_{m}_"
         if test_name.startswith(pref):
-            rest = test_name[len(pref):]
+            rest = test_name[len(pref) :]
             column = rest if "__" not in rest else rest.split("__")[0]
             candidates.append((len(m), m, column or None))
     if candidates:
         candidates.sort(reverse=True)
-        _, model, column = candidates[0]
-        return model, column
+        _, model, picked_column = candidates[0]
+        return model, picked_column
     return depends_on_models[0], None
 
 
@@ -394,7 +392,7 @@ def _verdict_for(scores: tuple[ClassScore, ...] | list[ClassScore]) -> Verdict:
     return Verdict.TRIAGE_ONLY
 
 
-def _evidence_summary(evidence, top: ClassScore) -> str:
+def _evidence_summary(evidence: ClassifierEvidence, top: ClassScore) -> str:
     """Single-sentence explainer that names the signal the top class fired on."""
     cls = top.cause_class
     if cls is RootCauseClass.UPSTREAM_NULL_SPIKE:

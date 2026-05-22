@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -45,7 +45,7 @@ def test_ground_truth_class_enum() -> None:
         source_table="raw.orders",
         source_column="cust_id",
         offending_row_pks=("1", "2"),
-        injected_at=datetime(2026, 5, 21, tzinfo=timezone.utc),
+        injected_at=datetime(2026, 5, 21, tzinfo=UTC),
         fault_pattern="null_spike.flat_5pct",
     )
     assert gt.cause_class is RootCauseClass.UPSTREAM_NULL_SPIKE

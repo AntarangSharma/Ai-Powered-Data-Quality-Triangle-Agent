@@ -9,8 +9,8 @@ We keep it as JSONL (not Postgres) because:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from dq_triage.models import GroundTruth
 

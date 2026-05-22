@@ -11,13 +11,9 @@ from dq_triage.agent.evidence import assemble_evidence
 @pytest.fixture
 def con():
     c = duckdb.connect(":memory:")
-    c.execute(
-        "CREATE TABLE raw_orders (id INTEGER, user_id INTEGER, status VARCHAR)"
-    )
+    c.execute("CREATE TABLE raw_orders (id INTEGER, user_id INTEGER, status VARCHAR)")
     c.execute("CREATE TABLE raw_customers (id INTEGER, name VARCHAR)")
-    c.execute(
-        "INSERT INTO raw_customers VALUES (1,'a'),(2,'b'),(3,'c'),(4,'d')"
-    )
+    c.execute("INSERT INTO raw_customers VALUES (1,'a'),(2,'b'),(3,'c'),(4,'d')")
     c.execute(
         "INSERT INTO raw_orders VALUES "
         "(1, 1, 'open'),(2, 2, 'open'),(3, 3, 'shipped'),(4, 4, 'returned')"

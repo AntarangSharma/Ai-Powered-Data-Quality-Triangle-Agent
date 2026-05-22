@@ -52,17 +52,13 @@ def test_null_spike_saturates_at_one():
 
 
 def test_null_spike_dampened_when_orphans_present_and_rate_small():
-    score = detect_upstream_null_spike(
-        _ev(blame_null_rate=0.02, orphan_fk_count=10)
-    )
+    score = detect_upstream_null_spike(_ev(blame_null_rate=0.02, orphan_fk_count=10))
     assert score is not None
     assert score.score < 0.2  # 0.02*10*0.5 = 0.1
 
 
 def test_null_spike_not_dampened_when_rate_dominates():
-    score = detect_upstream_null_spike(
-        _ev(blame_null_rate=0.20, orphan_fk_count=10)
-    )
+    score = detect_upstream_null_spike(_ev(blame_null_rate=0.20, orphan_fk_count=10))
     assert score is not None
     assert score.score == 1.0
 
@@ -75,21 +71,15 @@ def test_dupe_zero_is_silent():
 
 
 def test_dupe_one_floors_at_0_7():
-    score = detect_duplicate_ingestion(
-        _ev(blame_pk_dupe_count=1, blame_row_count=1000)
-    )
+    score = detect_duplicate_ingestion(_ev(blame_pk_dupe_count=1, blame_row_count=1000))
     assert score is not None
     assert score.cause_class is RootCauseClass.DUPLICATE_INGESTION
     assert score.score >= 0.7
 
 
 def test_dupe_score_scales_with_rate():
-    low = detect_duplicate_ingestion(
-        _ev(blame_pk_dupe_count=1, blame_row_count=1000)
-    )
-    high = detect_duplicate_ingestion(
-        _ev(blame_pk_dupe_count=100, blame_row_count=1000)
-    )
+    low = detect_duplicate_ingestion(_ev(blame_pk_dupe_count=1, blame_row_count=1000))
+    high = detect_duplicate_ingestion(_ev(blame_pk_dupe_count=100, blame_row_count=1000))
     assert low is not None and high is not None
     assert high.score > low.score
 

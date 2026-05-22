@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import ClassVar
 
 import duckdb
@@ -38,28 +38,22 @@ class _NullSpikeBase(Fault):
     def __init__(self, target: FaultTarget) -> None:
         self.target = target
 
-    def apply(
-        self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int
-    ) -> FaultResult:
+    def apply(self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int) -> FaultResult:
         rng = random.Random(seed)
         t = self.target
         where = f"WHERE {self.predicate_sql}" if self.predicate_sql else ""
-        rows = con.execute(
-            f"SELECT {t.pk_column} FROM {t.raw_table} {where}"
-        ).fetchall()
+        rows = con.execute(f"SELECT {t.pk_column} FROM {t.raw_table} {where}").fetchall()
         candidate_pks = [r[0] for r in rows]
         if not candidate_pks:
             raise RuntimeError(
-                f"Fault {self.pattern_id}: no candidate rows for "
-                f"{t.raw_table}.{t.column}"
+                f"Fault {self.pattern_id}: no candidate rows for {t.raw_table}.{t.column}"
             )
         n_flip = max(1, int(len(candidate_pks) * self.fraction))
         chosen = rng.sample(candidate_pks, n_flip)
 
         placeholders = ",".join(["?"] * len(chosen))
         con.execute(
-            f"UPDATE {t.raw_table} SET {t.column} = NULL "
-            f"WHERE {t.pk_column} IN ({placeholders})",
+            f"UPDATE {t.raw_table} SET {t.column} = NULL WHERE {t.pk_column} IN ({placeholders})",
             chosen,
         )
 
@@ -69,7 +63,7 @@ class _NullSpikeBase(Fault):
             source_table=t.raw_table,
             source_column=t.column,
             offending_row_pks=tuple(str(pk) for pk in sorted(chosen)),
-            injected_at=datetime.now(timezone.utc),
+            injected_at=datetime.now(UTC),
             fault_pattern=self.pattern_id,
         )
         return FaultResult(ground_truth=gt, rows_affected=n_flip)

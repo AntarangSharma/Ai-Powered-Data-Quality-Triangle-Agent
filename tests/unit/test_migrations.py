@@ -54,7 +54,9 @@ def test_upgrade_head_creates_tables(fresh_db: str):
     # Allow benign index-uniqueness or server_default formatting diffs that
     # SQLite cannot fully represent — but a fresh upgrade should produce
     # nothing structural.
-    structural = [d for d in diff if d[0] in {"add_table", "remove_table", "add_column", "remove_column"}]
+    structural = [
+        d for d in diff if d[0] in {"add_table", "remove_table", "add_column", "remove_column"}
+    ]
     assert structural == [], f"schema drift detected: {structural}"
 
 

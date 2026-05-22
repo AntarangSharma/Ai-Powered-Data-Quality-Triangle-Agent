@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
 from rich.console import Console
@@ -36,6 +37,9 @@ from eval.faults.duplicate_ingestion import ALL_DUPE_PATTERNS
 from eval.faults.null_spike import ALL_NULL_SPIKE_PATTERNS
 from eval.ground_truth import write_jsonl as write_truths_jsonl
 from eval.metrics import Prediction, compute
+
+if TYPE_CHECKING:
+    from eval.metrics import MetricsReport
 
 console = Console()
 
@@ -65,17 +69,19 @@ def build_suite(suite: str, cfg: DatasetConfig = JAFFLE_SHOP) -> list[Trial]:
     else:
         raise SystemExit(f"unknown suite: {suite}")
 
-    # (fault_class_list, target) pairs.
-    families: list[tuple[list[type], object]] = [
-        (ALL_NULL_SPIKE_PATTERNS, cfg.null_spike_target),
-        (ALL_DUPE_PATTERNS, cfg.duplicate_ingestion_target),
-        (ALL_BROKEN_JOIN_PATTERNS, cfg.broken_join_dropout_target),
+    # (fault_class_list, target) pairs. Types are erased here because each
+    # fault family ships its own base class; mypy can't see the common
+    # constructor shape without a Protocol, which isn't worth the noise.
+    families: list[tuple[list[type[Fault]], object]] = [
+        (ALL_NULL_SPIKE_PATTERNS, cfg.null_spike_target),  # type: ignore[list-item]
+        (ALL_DUPE_PATTERNS, cfg.duplicate_ingestion_target),  # type: ignore[list-item]
+        (ALL_BROKEN_JOIN_PATTERNS, cfg.broken_join_dropout_target),  # type: ignore[list-item]
     ]
     trials: list[Trial] = []
     for fault_classes, target in families:
         for cls in fault_classes:
             for s in range(1, seeds_per + 1):
-                trials.append(Trial(fault=cls(target), seed=s))
+                trials.append(Trial(fault=cls(target), seed=s))  # type: ignore[call-arg]
     return trials
 
 
@@ -84,7 +90,7 @@ def build_suite(suite: str, cfg: DatasetConfig = JAFFLE_SHOP) -> list[Trial]:
 # ---------------------------------------------------------------------------
 
 
-def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
+def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict[str, object]]:
     """Returns (ground_truth, prediction-or-None, diagnostics)."""
     cfg = JAFFLE_SHOP
     duckdb_path = cfg.duckdb_path
@@ -108,9 +114,7 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
     #    relationship test names). If nothing matches, fall back to the
     #    "most upstream" heuristic (prefer stg_*).
     expected_prefix = getattr(trial.fault, "target", None)
-    expected_test = (
-        expected_prefix.expected_failing_test if expected_prefix is not None else None
-    )
+    expected_test = expected_prefix.expected_failing_test if expected_prefix is not None else None
     failing = list(build_result.failures)
     chosen = None
     if expected_test:
@@ -143,9 +147,7 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
     manifest = Manifest(cfg.dbt_project_dir)
     chosen_node = manifest.by_name.get(chosen.model)
     chosen_relation = (
-        f"{chosen_node.schema}.{chosen_node.alias}"
-        if chosen_node is not None
-        else chosen.model
+        f"{chosen_node.schema}.{chosen_node.alias}" if chosen_node is not None else chosen.model
     )
     with duckdb.connect(str(duckdb_path), read_only=True) as con:
         try:
@@ -163,9 +165,7 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
         elif "unique_field" in failing_rows.columns:
             # unique test: the duplicated column value == PK for staging
             # models where the tested column is the model's PK.
-            failing_pks = tuple(
-                str(v) for v in failing_rows["unique_field"].tolist()
-            )
+            failing_pks = tuple(str(v) for v in failing_rows["unique_field"].tolist())
         elif "from_field" in failing_rows.columns:
             # relationships test: orphan FK values. Translate FK -> PK by
             # joining back into the failing model.
@@ -207,11 +207,7 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
     #      classifier can probe orphan FKs / parent row counts.
     parent_raw_table: str | None = None
     parent_raw_column: str | None = None
-    if (
-        chosen.kind == "relationships"
-        and chosen.parent_model
-        and chosen.parent_column
-    ):
+    if chosen.kind == "relationships" and chosen.parent_model and chosen.parent_column:
         parent_pk_col_for_walk = _pk_col_for_model(chosen.parent_model)
         with duckdb.connect(str(duckdb_path), read_only=True) as con:
             parent_blame = attributor.attribute(
@@ -222,9 +218,7 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
                 failing_pk_column=parent_pk_col_for_walk,
             )
         parent_raw_table = parent_blame.model
-        parent_raw_column = parent_blame.column or _pk_col_for_model(
-            parent_blame.model
-        )
+        parent_raw_column = parent_blame.column or _pk_col_for_model(parent_blame.model)
 
     # 6.6. Probe upstream stats → ClassifierEvidence (W3).
     with duckdb.connect(str(duckdb_path), read_only=True) as con:
@@ -255,17 +249,21 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict]:
         confidence=top_score.score,
         latency_seconds=build_seconds,
     )
-    return gt, prediction, {
-        "chosen_test": chosen.test_name,
-        "n_failing_pks": len(failing_pks),
-        "build_s": build_seconds,
-        "predicted_class": top_score.cause_class.value,
-        "predicted_score": round(top_score.score, 3),
-        "true_class": trial.fault.cause_class.value,
-        "evidence_null_rate": round(evidence.blame_null_rate, 4),
-        "evidence_dupe_count": evidence.blame_pk_dupe_count,
-        "evidence_orphan_fk_count": evidence.orphan_fk_count,
-    }
+    return (
+        gt,
+        prediction,
+        {
+            "chosen_test": chosen.test_name,
+            "n_failing_pks": len(failing_pks),
+            "build_s": build_seconds,
+            "predicted_class": top_score.cause_class.value,
+            "predicted_score": round(top_score.score, 3),
+            "true_class": trial.fault.cause_class.value,
+            "evidence_null_rate": round(evidence.blame_null_rate, 4),
+            "evidence_dupe_count": evidence.blame_pk_dupe_count,
+            "evidence_orphan_fk_count": evidence.orphan_fk_count,
+        },
+    )
 
 
 def _pk_col_for_model(model: str) -> str:
@@ -295,7 +293,7 @@ def run(suite: str, report_path: Path) -> int:
     preds: list[Prediction] = []
     stealth = 0
     failed_attributions = 0
-    diag: list[dict] = []
+    diag: list[dict[str, object]] = []
 
     with Progress(
         TextColumn("[progress.description]{task.description}"),
@@ -320,6 +318,7 @@ def run(suite: str, report_path: Path) -> int:
 
     # Score
     from eval.metrics import pair as pair_fn
+
     pairs = pair_fn(preds, truths)
     report = compute(pairs)
 
@@ -330,26 +329,32 @@ def run(suite: str, report_path: Path) -> int:
     (run_dir / "diagnostics.txt").write_text("\n".join(repr(d) for d in diag))
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(_render_report(
-        suite=suite,
-        report=report,
-        n_trials=len(trials),
-        n_preds=len(preds),
-        stealth=stealth,
-        failed_attributions=failed_attributions,
-        run_dir=run_dir,
-    ))
+    report_path.write_text(
+        _render_report(
+            suite=suite,
+            report=report,
+            n_trials=len(trials),
+            n_preds=len(preds),
+            stealth=stealth,
+            failed_attributions=failed_attributions,
+            run_dir=run_dir,
+        )
+    )
 
     console.print()
     console.print(f"[green]✓[/] Report → {report_path}")
-    console.print(f"  • Trials: {len(trials)}  Predictions: {len(preds)}  Stealth: {stealth}  No-attribution: {failed_attributions}")
-    console.print(f"  • Top-1 table acc: {report.top1_table_acc:.1%}   Row recall: {report.row_recall:.2f}   Median latency: {report.median_latency_s:.2f}s")
+    console.print(
+        f"  • Trials: {len(trials)}  Predictions: {len(preds)}  Stealth: {stealth}  No-attribution: {failed_attributions}"
+    )
+    console.print(
+        f"  • Top-1 table acc: {report.top1_table_acc:.1%}   Row recall: {report.row_recall:.2f}   Median latency: {report.median_latency_s:.2f}s"
+    )
     return 0
 
 
 def _render_report(
     suite: str,
-    report,
+    report: MetricsReport,
     n_trials: int,
     n_preds: int,
     stealth: int,
@@ -358,7 +363,7 @@ def _render_report(
 ) -> str:
     from eval.metrics import MetricsReport
 
-    per_class_lines = "\n".join(
+    per_class_lines: str = "\n".join(
         f"| `{cls.value}` | {acc:.1%} |"
         for cls, acc in sorted(report.per_class_accuracy.items(), key=lambda kv: kv[0].value)
     )
@@ -373,8 +378,10 @@ def _render_report(
         f"- No-attribution failures: **{failed_attributions}**\n"
         f"- Run dir: `{run_dir.relative_to(Path.cwd()) if run_dir.is_relative_to(Path.cwd()) else run_dir}`\n\n"
         f"## Results\n\n"
-        + MetricsReport.markdown_header() + "\n"
-        + report.as_markdown_row("SqlglotWalker + RulesClassifier (W3)") + "\n\n"
+        + MetricsReport.markdown_header()
+        + "\n"
+        + report.as_markdown_row("SqlglotWalker + RulesClassifier (W3)")
+        + "\n\n"
         f"## Per-class accuracy\n\n"
         f"| Class | Accuracy |\n|---|---|\n{per_class_lines}\n\n"
         "## Honesty disclaimer (Week 3)\n\n"

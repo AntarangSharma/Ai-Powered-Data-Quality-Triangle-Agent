@@ -17,9 +17,9 @@ Reference formulas (see docs/02_revised_plan.md §Metrics):
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from statistics import mean
-from typing import Iterable, Sequence
 
 from dq_triage.models import GroundTruth, Incident, RootCauseClass
 
@@ -45,7 +45,7 @@ class Prediction:
     latency_seconds: float
 
     @classmethod
-    def from_incident(cls, incident_key: str, incident: Incident) -> "Prediction":
+    def from_incident(cls, incident_key: str, incident: Incident) -> Prediction:
         cands: list[str] = [incident.blame_location.model]
         for h in incident.hypotheses:
             if h.blame_model not in cands:
@@ -94,9 +94,7 @@ def pair(
 # ---------------------------------------------------------------------------
 
 
-def top_k_table_accuracy(
-    pairs: Sequence[tuple[Prediction, GroundTruth]], k: int = 1
-) -> float:
+def top_k_table_accuracy(pairs: Sequence[tuple[Prediction, GroundTruth]], k: int = 1) -> float:
     if not pairs:
         return 0.0
     hits = sum(1 for p, g in pairs if g.source_table in p.candidate_tables[:k])
@@ -194,7 +192,7 @@ def per_class_accuracy(
 def expected_calibration_error(
     pairs: Sequence[tuple[Prediction, GroundTruth]], n_bins: int = 10
 ) -> float:
-    """ECE = Σ_b (n_b / N) × |acc(b) − conf(b)|.
+    """ECE = sum over bins of (n_b / N) * |acc(b) - conf(b)|.
 
     A binary correctness signal is used: prediction is 'correct' iff
     cause_class matches ground truth.

@@ -38,9 +38,7 @@ class Fault(ABC):
     cause_class: RootCauseClass
 
     @abstractmethod
-    def apply(
-        self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int
-    ) -> FaultResult:
+    def apply(self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int) -> FaultResult:
         """Mutate the warehouse in `con` and return ground truth."""
 
     def __repr__(self) -> str:  # pragma: no cover

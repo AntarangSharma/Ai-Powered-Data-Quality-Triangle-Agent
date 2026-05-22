@@ -41,6 +41,7 @@ from dq_triage.models import BlameLocation, LineageEdge
 @dataclass(frozen=True, slots=True)
 class _Step:
     """One hop of the column-lineage walk."""
+
     downstream_model: str
     downstream_column: str
     upstream_model: str
@@ -80,8 +81,7 @@ def _select_has_window(select: exp.Expression) -> bool:
     if not isinstance(select, exp.Select):
         return False
     return any(
-        next(iter(proj.find_all(exp.Window)), None) is not None
-        for proj in select.expressions or []
+        next(iter(proj.find_all(exp.Window)), None) is not None for proj in select.expressions or []
     )
 
 

@@ -32,9 +32,7 @@ from dq_triage.models import ClassScore, RootCauseClass, Verdict
 
 
 def test_parse_not_null():
-    model, col = _parse_test_name(
-        "not_null_stg_orders_customer_id", ["stg_orders"], "not_null"
-    )
+    model, col = _parse_test_name("not_null_stg_orders_customer_id", ["stg_orders"], "not_null")
     assert (model, col) == ("stg_orders", "customer_id")
 
 
@@ -49,9 +47,7 @@ def test_parse_relationships_strips_hash():
 
 def test_parse_longest_model_wins():
     """When multiple models could prefix-match, pick the longest one."""
-    model, col = _parse_test_name(
-        "unique_stg_orders_order_id", ["stg", "stg_orders"], "unique"
-    )
+    model, col = _parse_test_name("unique_stg_orders_order_id", ["stg", "stg_orders"], "unique")
     assert (model, col) == ("stg_orders", "order_id")
 
 
@@ -124,8 +120,11 @@ def test_load_failing_tests_picks_failures_only(tmp_path):
     _write_dbt_artifacts(
         target,
         results=[
-            {"unique_id": "test.proj.not_null_stg_orders_user_id", "status": "fail",
-             "relation_name": '"main_dbt_test_failures"."not_null_stg_orders_user_id"'},
+            {
+                "unique_id": "test.proj.not_null_stg_orders_user_id",
+                "status": "fail",
+                "relation_name": '"main_dbt_test_failures"."not_null_stg_orders_user_id"',
+            },
             {"unique_id": "test.proj.unique_stg_orders_order_id", "status": "pass"},
             # Non-test rows must be ignored.
             {"unique_id": "model.proj.stg_orders", "status": "success"},
@@ -147,10 +146,12 @@ def test_load_failing_tests_extracts_relationships_parent(tmp_path):
     nodes = {
         "test.proj.rel_test": {
             "name": "relationships_stg_orders_customer_id__customer_id__ref_stg_customers_",
-            "depends_on": {"nodes": [
-                "model.proj.stg_orders",
-                "model.proj.stg_customers",
-            ]},
+            "depends_on": {
+                "nodes": [
+                    "model.proj.stg_orders",
+                    "model.proj.stg_customers",
+                ]
+            },
             "test_metadata": {"kwargs": {"field": "customer_id", "to": "ref('stg_customers')"}},
             "relation_name": '"main_dbt_test_failures"."rel_test"',
         },
@@ -158,8 +159,11 @@ def test_load_failing_tests_extracts_relationships_parent(tmp_path):
     _write_dbt_artifacts(
         target,
         results=[
-            {"unique_id": "test.proj.rel_test", "status": "fail",
-             "relation_name": '"main_dbt_test_failures"."rel_test"'},
+            {
+                "unique_id": "test.proj.rel_test",
+                "status": "fail",
+                "relation_name": '"main_dbt_test_failures"."rel_test"',
+            },
         ],
         nodes=nodes,
     )
@@ -203,8 +207,10 @@ def test_cli_triage_exit_2_when_no_failing_tests(runner, tmp_path):
         app,
         [
             "triage",
-            "--project", str(project),
-            "--duckdb", str(duckdb_file),
+            "--project",
+            str(project),
+            "--duckdb",
+            str(duckdb_file),
             "--no-persist",
         ],
     )
@@ -217,8 +223,11 @@ def test_cli_triage_rejects_unknown_test_name(runner, tmp_path):
     _write_dbt_artifacts(
         target,
         results=[
-            {"unique_id": "test.proj.not_null_stg_orders_user_id", "status": "fail",
-             "relation_name": '"main_dbt_test_failures"."not_null_stg_orders_user_id"'},
+            {
+                "unique_id": "test.proj.not_null_stg_orders_user_id",
+                "status": "fail",
+                "relation_name": '"main_dbt_test_failures"."not_null_stg_orders_user_id"',
+            },
         ],
         nodes={
             "test.proj.not_null_stg_orders_user_id": {
@@ -234,9 +243,12 @@ def test_cli_triage_rejects_unknown_test_name(runner, tmp_path):
         app,
         [
             "triage",
-            "--project", str(tmp_path),
-            "--duckdb", str(duckdb_file),
-            "--test", "does_not_exist",
+            "--project",
+            str(tmp_path),
+            "--duckdb",
+            str(duckdb_file),
+            "--test",
+            "does_not_exist",
             "--no-persist",
         ],
     )
@@ -280,14 +292,18 @@ def test_triage_end_to_end_on_jaffle(tmp_path, monkeypatch):
     assert incident.verdict_type in {Verdict.AUTO, Verdict.TWO_CANDIDATE, Verdict.TRIAGE_ONLY}
     # Round-trip: model_dump_json → re-parse must produce an equal Incident.
     from dq_triage.models import Incident as _I
+
     assert _I.model_validate_json(incident.model_dump_json()) == incident
 
 
 def test_failing_test_dataclass_is_frozen():
     """Defensive — protects against accidental mutation in handlers."""
     t = FailingTest(
-        test_name="x", model="m", column="c",
-        failures_table_fqn="t", kind="not_null",
+        test_name="x",
+        model="m",
+        column="c",
+        failures_table_fqn="t",
+        kind="not_null",
     )
     # Frozen dataclasses raise FrozenInstanceError on attribute assignment.
     with pytest.raises(AttributeError):

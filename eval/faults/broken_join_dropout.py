@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import ClassVar
 
 import duckdb
@@ -57,27 +57,27 @@ class _BrokenJoinBase(Fault):
     def __init__(self, target: FaultTarget) -> None:
         self.target = target
 
-    def apply(
-        self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int
-    ) -> FaultResult:
+    def apply(self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int) -> FaultResult:
         rng = random.Random(seed)
         t = self.target
         # 1. Find parent PKs that are actually referenced by the child.
         #    Deleting unreferenced parents wouldn't break any relationships
         #    test — we want a *symptomatic* fault.
-        referenced = [r[0] for r in con.execute(
-            f"SELECT DISTINCT p.{t.pk_column} "
-            f"FROM {t.raw_table} p "
-            f"WHERE p.{t.pk_column} IN ("
-            f"  SELECT {self.child_fk_column} FROM {self.child_table} "
-            f"  WHERE {self.child_fk_column} IS NOT NULL"
-            f") "
-            f"ORDER BY p.{t.pk_column}"
-        ).fetchall()]
+        referenced = [
+            r[0]
+            for r in con.execute(
+                f"SELECT DISTINCT p.{t.pk_column} "
+                f"FROM {t.raw_table} p "
+                f"WHERE p.{t.pk_column} IN ("
+                f"  SELECT {self.child_fk_column} FROM {self.child_table} "
+                f"  WHERE {self.child_fk_column} IS NOT NULL"
+                f") "
+                f"ORDER BY p.{t.pk_column}"
+            ).fetchall()
+        ]
         if not referenced:
             raise RuntimeError(
-                f"{self.pattern_id}: no referenced rows to delete in "
-                f"{t.raw_table}.{t.pk_column}"
+                f"{self.pattern_id}: no referenced rows to delete in {t.raw_table}.{t.pk_column}"
             )
         n_drop = max(1, int(len(referenced) * self.fraction))
         if self.pick_tail:
@@ -108,13 +108,10 @@ class _BrokenJoinBase(Fault):
             source_table=self.child_table,
             source_column=self.child_fk_column,
             offending_row_pks=tuple(sorted(orphan_child_pks, key=lambda s: (len(s), s))),
-            injected_at=datetime.now(timezone.utc),
+            injected_at=datetime.now(UTC),
             fault_pattern=self.pattern_id,
             # Where the actual deletion happened (for classifier eval).
-            notes=(
-                f"deleted parents {sorted(chosen_parent_pks)} from "
-                f"{t.raw_table}.{t.pk_column}"
-            ),
+            notes=(f"deleted parents {sorted(chosen_parent_pks)} from {t.raw_table}.{t.pk_column}"),
         )
         return FaultResult(ground_truth=gt, rows_affected=len(orphan_child_pks))
 

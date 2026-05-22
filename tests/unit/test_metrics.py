@@ -7,7 +7,7 @@ to be re-checked too.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -41,7 +41,7 @@ def _gt(
         source_table=table,
         source_column=column,
         offending_row_pks=pks,
-        injected_at=datetime(2026, 5, 21, tzinfo=timezone.utc),
+        injected_at=datetime(2026, 5, 21, tzinfo=UTC),
         fault_pattern="null_spike.flat_5pct",
     )
 
@@ -126,24 +126,42 @@ def test_row_f1_zero_when_disjoint() -> None:
 
 def test_macro_f1_all_correct() -> None:
     pairs = [
-        (_pred("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE), _gt("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE)),
-        (_pred("b", cls=RootCauseClass.DUPLICATE_INGESTION), _gt("b", cls=RootCauseClass.DUPLICATE_INGESTION)),
+        (
+            _pred("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+            _gt("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+        ),
+        (
+            _pred("b", cls=RootCauseClass.DUPLICATE_INGESTION),
+            _gt("b", cls=RootCauseClass.DUPLICATE_INGESTION),
+        ),
     ]
     assert macro_class_f1(pairs) == 1.0
 
 
 def test_macro_f1_all_wrong() -> None:
     pairs = [
-        (_pred("a", cls=RootCauseClass.DUPLICATE_INGESTION), _gt("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE)),
-        (_pred("b", cls=RootCauseClass.UPSTREAM_NULL_SPIKE), _gt("b", cls=RootCauseClass.DUPLICATE_INGESTION)),
+        (
+            _pred("a", cls=RootCauseClass.DUPLICATE_INGESTION),
+            _gt("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+        ),
+        (
+            _pred("b", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+            _gt("b", cls=RootCauseClass.DUPLICATE_INGESTION),
+        ),
     ]
     assert macro_class_f1(pairs) == 0.0
 
 
 def test_per_class_accuracy() -> None:
     pairs = [
-        (_pred("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE), _gt("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE)),
-        (_pred("b", cls=RootCauseClass.DUPLICATE_INGESTION), _gt("b", cls=RootCauseClass.UPSTREAM_NULL_SPIKE)),
+        (
+            _pred("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+            _gt("a", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+        ),
+        (
+            _pred("b", cls=RootCauseClass.DUPLICATE_INGESTION),
+            _gt("b", cls=RootCauseClass.UPSTREAM_NULL_SPIKE),
+        ),
     ]
     acc = per_class_accuracy(pairs)
     assert acc[RootCauseClass.UPSTREAM_NULL_SPIKE] == 0.5

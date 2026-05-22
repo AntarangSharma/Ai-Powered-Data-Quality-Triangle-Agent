@@ -17,10 +17,14 @@ hook, etc.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
 from rich.table import Table
+
+if TYPE_CHECKING:
+    from dq_triage.models import Incident
 
 app = typer.Typer(
     name="dq-triage",
@@ -108,8 +112,7 @@ def triage(
     failing = load_failing_tests(project)
     if not failing:
         console.print(
-            "[yellow]No failing tests found in target/run_results.json. "
-            "Run `dbt build` first.[/]"
+            "[yellow]No failing tests found in target/run_results.json. Run `dbt build` first.[/]"
         )
         raise typer.Exit(code=2)
 
@@ -141,7 +144,7 @@ def triage(
         _print_incident(incident)
 
 
-def _print_incident(incident) -> None:
+def _print_incident(incident: Incident) -> None:
     """Pretty-print an Incident with rich tables."""
     from dq_triage.models import Verdict
 
@@ -170,14 +173,14 @@ def _print_incident(incident) -> None:
     )
     if incident.final_verdict is not None:
         v = incident.final_verdict
-        console.print(f"[bold]Cause:[/] [{verdict_colour}]{v.cause_class.value}[/]  "
-                      f"(confidence {v.confidence:.2f})")
+        console.print(
+            f"[bold]Cause:[/] [{verdict_colour}]{v.cause_class.value}[/]  "
+            f"(confidence {v.confidence:.2f})"
+        )
         console.print(f"[bold]Why:[/] {v.evidence_summary}")
         console.print(f"[bold]Fix:[/] {v.suggested_one_line_fix}")
     else:
-        console.print(
-            "[yellow]No confident verdict — see ranked candidates below.[/]"
-        )
+        console.print("[yellow]No confident verdict — see ranked candidates below.[/]")
 
     tbl = Table(title="Ranked cause classes", show_lines=False)
     tbl.add_column("rank", justify="right")

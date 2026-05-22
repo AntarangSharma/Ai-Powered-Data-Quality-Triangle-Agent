@@ -108,9 +108,7 @@ def test_select_has_window() -> None:
 
 def test_classify_transform_prefers_agg_over_cast() -> None:
     # SUM(CAST(...)) — AGG dominates because it breaks row identity.
-    sel = sqlglot.parse_one(
-        "SELECT SUM(CAST(x AS INT)) AS y FROM t GROUP BY z", dialect="duckdb"
-    )
+    sel = sqlglot.parse_one("SELECT SUM(CAST(x AS INT)) AS y FROM t GROUP BY z", dialect="duckdb")
     assert _classify_transform(sel) == "AGG"
 
 
@@ -221,7 +219,7 @@ def test_walker_marks_agg_boundary_and_drops_pks() -> None:
         },
         _sql={
             "mart": (
-                'SELECT order_id, SUM(amount) AS amount '
+                "SELECT order_id, SUM(amount) AS amount "
                 'FROM "warehouse"."main_staging"."stg_p" GROUP BY order_id'
             ),
             "stg_p": 'SELECT amount FROM "warehouse"."main"."raw_p"',

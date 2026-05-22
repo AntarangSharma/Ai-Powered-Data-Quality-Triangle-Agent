@@ -3,7 +3,7 @@
 Wrap every LLM call. Key = sha256(model + messages + schema_name + extras).
 Cache lives on disk (diskcache) so it survives across processes and CI runs.
 
-Why this matters: a 250-incident × 3-seed eval is 1,500 LLM calls. Without a
+Why this matters: a 250-incident x 3-seed eval is 1,500 LLM calls. Without a
 cache, that is $30 and 30 minutes per run. With cache, the first run pays;
 every subsequent run is free and deterministic.
 """
@@ -17,7 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
-from diskcache import Cache
+from diskcache import Cache  # type: ignore[import-untyped]
 
 T = TypeVar("T")
 

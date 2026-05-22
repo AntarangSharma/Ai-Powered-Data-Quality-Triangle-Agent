@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import duckdb
 import pytest
@@ -19,7 +19,6 @@ from dq_triage.stats.probes import (
     probe_freshness,
     probe_row_count,
 )
-
 
 # ---------------------------------------------------------------------------
 # Identifier safety
@@ -168,7 +167,7 @@ def test_probe_freshness_returns_max(con: duckdb.DuckDBPyConnection) -> None:
 def test_probe_freshness_empty_table() -> None:
     c = duckdb.connect(":memory:")
     c.execute("CREATE TABLE t (ts TIMESTAMP)")
-    fr = probe_freshness(c, "t", "ts", observed_at=datetime.now(timezone.utc))
+    fr = probe_freshness(c, "t", "ts", observed_at=datetime.now(UTC))
     assert fr.max_timestamp is None
     assert fr.lag_seconds is None
 

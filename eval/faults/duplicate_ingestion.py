@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import ClassVar
 
 import duckdb
@@ -45,22 +45,20 @@ class _DupeBase(Fault):
     def __init__(self, target: FaultTarget) -> None:
         self.target = target
 
-    def apply(
-        self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int
-    ) -> FaultResult:
+    def apply(self, con: duckdb.DuckDBPyConnection, dataset_name: str, seed: int) -> FaultResult:
         rng = random.Random(seed)
         t = self.target
         # 1. Pick the PK values whose rows we'll duplicate.
-        all_pks = [r[0] for r in con.execute(
-            f"SELECT {t.pk_column} FROM {t.raw_table} ORDER BY {t.pk_column}"
-        ).fetchall()]
+        all_pks = [
+            r[0]
+            for r in con.execute(
+                f"SELECT {t.pk_column} FROM {t.raw_table} ORDER BY {t.pk_column}"
+            ).fetchall()
+        ]
         if not all_pks:
             raise RuntimeError(f"{self.pattern_id}: {t.raw_table} is empty")
         n_dup = max(1, int(len(all_pks) * self.fraction))
-        if self.pick_tail:
-            chosen = all_pks[-n_dup:]
-        else:
-            chosen = rng.sample(all_pks, n_dup)
+        chosen = all_pks[-n_dup:] if self.pick_tail else rng.sample(all_pks, n_dup)
 
         # 2. Re-insert those rows verbatim. We don't know the schema at compile
         #    time, so we copy whole rows via INSERT…SELECT…WHERE pk IN (…).
@@ -77,7 +75,7 @@ class _DupeBase(Fault):
             source_table=t.raw_table,
             source_column=t.column,
             offending_row_pks=tuple(str(pk) for pk in sorted(chosen)),
-            injected_at=datetime.now(timezone.utc),
+            injected_at=datetime.now(UTC),
             fault_pattern=self.pattern_id,
             notes=f"duplicated {n_dup} rows in {t.raw_table}.{t.pk_column}",
         )
