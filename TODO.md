@@ -1,7 +1,7 @@
 # What's left
 
 Living checklist. Items are removed when they ship (with the commit SHA that
-shipped them recorded in the git log, not here). Last updated: 2026-05-22.
+shipped them recorded in the git log, not here). Last updated: 2026-05-22 (afternoon).
 
 Status legend: 🟢 in progress · 🟡 next up · 🟣 deferred (post-portfolio) · ⏸ blocked
 
@@ -25,6 +25,13 @@ The full audit is in `git log --oneline`. High-level milestones:
   on 45 trials** (load-bearing now, was a tautology in W2).
 - **Week 3.5.** User-facing CLI orchestrator (`dq-triage triage`) wired to
   the persistence layer. `dq-triage incidents list/show` for inspection.
+- **Hygiene pass.** Repo is `ruff` + `mypy strict` + `ruff format` clean
+  end-to-end; CI workflows (test / lint / eval-smoke) go green.
+  README rewritten with the real 45-trial numbers, real architecture
+  diagram, and a live `dq-triage triage ...` example.
+- **FastAPI webhook.** Same pipeline behind `POST /webhook/dbt-failure`
+  + `GET /health`. Same orchestrator function the CLI calls; OpenAPI
+  schema exposes `Incident` so callers can generate typed SDKs.
 
 ---
 
@@ -74,18 +81,10 @@ function in `dq_triage.classification.rules` + 1-2 probes in
 
 ## 🟡 Hygiene & ops (Week 5 polish)
 
-- [ ] **GitHub Actions CI**: ruff + pytest on every PR + push to main.
-      Cache `.venv` to keep CI under 90s.
-- [ ] **README polish**: replace the "what it does" stub with the actual
-      numbers (45 trials, Macro F1 = 1.00, 2.56s median latency). Add an
-      architecture diagram (Mermaid: dbt → walker → probes → classifier
-      → store → narrator).
 - [ ] **60-second Loom / GIF**: dbt build fails → run `dq-triage triage`
       → incident appears → `dq-triage incidents list` shows it. This is
       the single highest-leverage piece of work left for portfolio
-      purposes.
-- [ ] **FastAPI handler** at `POST /webhook/dbt-failure` — same pipeline,
-      reachable from a CI workflow. Already have `fastapi` in deps.
+      purposes — can't be done in this session (needs screen recording).
 
 ---
 
