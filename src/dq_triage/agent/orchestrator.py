@@ -278,13 +278,15 @@ def triage(
     elapsed = time.perf_counter() - t0
 
     # 6. Build the Incident.
+    from dq_triage.classification.calibration import calibrate
+
     hypothesis = RootCauseHypothesis(
         cause_class=top.cause_class,
         blame_model=blame.model,
         blame_column=blame.column,
         blame_rows_sample=(),
         confidence=top.score,
-        confidence_calibrated=top.score,  # no calibration yet (W6 task)
+        confidence_calibrated=calibrate(top.score),
         evidence_summary=_evidence_summary(evidence, top),
         suggested_one_line_fix=_suggested_fix(top.cause_class, blame),
     )

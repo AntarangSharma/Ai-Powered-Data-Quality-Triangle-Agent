@@ -1,21 +1,21 @@
-# Eval Report — full
+# Eval Report — smoke
 
-_generated: 2026-05-21T23:53:32.243328+00:00_
+_generated: 2026-05-22T01:04:04.083329+00:00_
 
 ## Suite
 
 - Dataset: **jaffle_shop**
-- Trials: **45**
-- Predictions emitted: **45**
+- Trials: **18**
+- Predictions emitted: **18**
 - Stealth faults (no test broke): **0**
 - No-attribution failures: **0**
-- Run dir: `eval/runs/20260521T235332Z`
+- Run dir: `eval/runs/20260522T010404Z`
 
 ## Results
 
 | System | Top-1 table | Top-3 table | Col\|table | Row recall | Row F1 | Macro F1 | Median latency | ECE |
 |---|---|---|---|---|---|---|---|---|
-| SqlglotWalker (W2) | 100.0% | 100.0% | 100.0% | 1.00 | 1.00 | 1.00 | 2.6s | 0.069 |
+| SqlglotWalker + RulesClassifier (W3) | 100.0% | 100.0% | 100.0% | 1.00 | 1.00 | 1.00 | 3.1s | 0.063 |
 
 ## Per-class accuracy
 

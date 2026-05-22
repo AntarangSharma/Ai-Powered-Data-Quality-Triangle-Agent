@@ -79,3 +79,36 @@ def cache_stats() -> dict[str, int | float]:
 
 def clear_cache() -> None:
     _get_cache().clear()
+
+
+class BudgetExceededError(Exception):
+    """Raised when the LLM budget cap is reached."""
+
+    pass
+
+
+_BUDGET_FILE = Path(os.getenv("DQ_LLM_CACHE_DIR", ".llm_cache")) / "llm_budget_usage.json"
+
+
+def _get_max_budget() -> float:
+    try:
+        return float(os.environ.get("DQ_LLM_BUDGET_USD", "0.50"))
+    except ValueError:
+        return 0.50
+
+
+def read_budget_spent() -> float:
+    if not _BUDGET_FILE.exists():
+        return 0.0
+    try:
+        with open(_BUDGET_FILE) as f:
+            data = json.load(f)
+            return float(data.get("spent", 0.0))
+    except Exception:
+        return 0.0
+
+
+def _write_budget_spent(spent: float) -> None:
+    _BUDGET_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_BUDGET_FILE, "w") as f:
+        json.dump({"spent": spent}, f)

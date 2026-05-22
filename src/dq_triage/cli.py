@@ -251,5 +251,31 @@ def incidents_show(
         _print_incident(incident)
 
 
+@app.command()
+def notify(
+    incident_id: str = typer.Argument(..., help="Incident ID to notify."),
+    channel: str = typer.Option(
+        "alerts",
+        "--channel",
+        "-c",
+        help="Slack channel to post to.",
+    ),
+) -> None:
+    """Compose a narrative and send a Slack notification for a persisted Incident."""
+    from dq_triage.narrator import compose, post
+    from dq_triage.store import load_incident
+
+    incident = load_incident(incident_id)
+    if incident is None:
+        console.print(f"[red]incident {incident_id!r} not found[/]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[blue]Composing narrative for incident {incident_id}...[/]")
+    narrated = compose(incident)
+    console.print(f"[blue]Posting notification to Slack channel #{channel}...[/]")
+    ts = post(narrated, incident, channel)
+    console.print(f"[green]Slack notification posted successfully! Thread TS: {ts}[/]")
+
+
 if __name__ == "__main__":
     app()

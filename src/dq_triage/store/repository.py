@@ -188,3 +188,26 @@ def iter_ground_truths(session: Session | None = None) -> Iterable[GroundTruth]:
     finally:
         if own:
             session.close()
+
+
+def update_human_label(
+    incident_id: str, label: RootCauseClass | None, session: Session | None = None
+) -> bool:
+    """Update the human feedback label on an existing incident."""
+    own = session is None
+    if session is None:
+        session = SessionLocal()
+    try:
+        row = session.get(IncidentRow, incident_id)
+        if row is None:
+            return False
+        row.human_label = label.value if label is not None else None
+        payload = dict(row.payload)
+        payload["human_label"] = label.value if label is not None else None
+        row.payload = payload
+        if own:
+            session.commit()
+        return True
+    finally:
+        if own:
+            session.close()

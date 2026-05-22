@@ -90,7 +90,9 @@ def build_suite(suite: str, cfg: DatasetConfig = JAFFLE_SHOP) -> list[Trial]:
 # ---------------------------------------------------------------------------
 
 
-def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict[str, object]]:
+def run_trial(
+    trial: Trial, baseline: str | None = None
+) -> tuple[GroundTruth, Prediction | None, dict[str, object]]:
     """Returns (ground_truth, prediction-or-None, diagnostics)."""
     cfg = JAFFLE_SHOP
     duckdb_path = cfg.duckdb_path
@@ -127,6 +129,41 @@ def run_trial(trial: Trial) -> tuple[GroundTruth, Prediction | None, dict[str, o
             failing,
             key=lambda f: (0 if f.model.startswith("stg_") else 1, f.model, f.test_name),
         )[0]
+
+    if baseline:
+        if baseline in ("b1", "b1_test_name"):
+            from eval.baselines import b1_test_name as bl
+        elif baseline in ("b2", "b2_elementary"):
+            from eval.baselines import b2_elementary as bl
+        elif baseline in ("b3", "b3_naive_llm"):
+            from eval.baselines import b3_naive_llm as bl
+        elif baseline in ("b4", "b4_no_llm"):
+            from eval.baselines import b4_no_llm as bl
+        else:
+            raise ValueError(f"unknown baseline: {baseline}")
+        with duckdb.connect(str(duckdb_path), read_only=True) as con:
+            pred = bl.predict(con, cfg, chosen, trial)
+        pred = Prediction(
+            incident_key=gt.incident_key,
+            candidate_tables=pred.candidate_tables,
+            blame_column=pred.blame_column,
+            blame_row_pks=pred.blame_row_pks,
+            cause_class=pred.cause_class,
+            confidence=pred.confidence,
+            latency_seconds=build_seconds,
+        )
+        return (
+            gt,
+            pred,
+            {
+                "chosen_test": chosen.test_name,
+                "n_failing_pks": 0,
+                "build_s": build_seconds,
+                "predicted_class": pred.cause_class.value,
+                "predicted_score": round(pred.confidence, 3),
+                "true_class": trial.fault.cause_class.value,
+            },
+        )
 
     # 5. Load failing row PKs from the failures table.
     #
@@ -286,7 +323,7 @@ def _pk_col_for_model(model: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def run(suite: str, report_path: Path) -> int:
+def run(suite: str, report_path: Path, baseline: str | None = None) -> int:
     trials = build_suite(suite)
     console.rule(f"[bold]Suite: {suite}  ({len(trials)} trials)")
     truths: list[GroundTruth] = []
@@ -304,7 +341,7 @@ def run(suite: str, report_path: Path) -> int:
     ) as progress:
         task = progress.add_task("trials", total=len(trials))
         for trial in trials:
-            gt, pred, info = run_trial(trial)
+            gt, pred, info = run_trial(trial, baseline=baseline)
             truths.append(gt)
             if pred is None:
                 if info.get("stealth"):
@@ -338,6 +375,7 @@ def run(suite: str, report_path: Path) -> int:
             stealth=stealth,
             failed_attributions=failed_attributions,
             run_dir=run_dir,
+            baseline=baseline,
         )
     )
 
@@ -360,6 +398,7 @@ def _render_report(
     stealth: int,
     failed_attributions: int,
     run_dir: Path,
+    baseline: str | None = None,
 ) -> str:
     from eval.metrics import MetricsReport
 
@@ -368,7 +407,7 @@ def _render_report(
         for cls, acc in sorted(report.per_class_accuracy.items(), key=lambda kv: kv[0].value)
     )
     return (
-        f"# Eval Report — {suite}\n\n"
+        f"# Eval Report — {suite}{' (Baseline: ' + baseline + ')' if baseline else ''}\n\n"
         f"_generated: {datetime.now(UTC).isoformat()}_\n\n"
         f"## Suite\n\n"
         f"- Dataset: **jaffle_shop**\n"
@@ -380,7 +419,9 @@ def _render_report(
         f"## Results\n\n"
         + MetricsReport.markdown_header()
         + "\n"
-        + report.as_markdown_row("SqlglotWalker + RulesClassifier (W3)")
+        + report.as_markdown_row(
+            f"{baseline} Baseline" if baseline else "SqlglotWalker + RulesClassifier (W3)"
+        )
         + "\n\n"
         f"## Per-class accuracy\n\n"
         f"| Class | Accuracy |\n|---|---|\n{per_class_lines}\n\n"
@@ -419,8 +460,22 @@ def main() -> int:
     parser.add_argument("--suite", choices=("smoke", "full"), default="smoke")
     parser.add_argument("--seeds", type=int, default=1, help="ignored in W1")
     parser.add_argument("--report", type=Path, default=Path("eval/REPORT.md"))
+    parser.add_argument(
+        "--baseline",
+        choices=(
+            "b1",
+            "b1_test_name",
+            "b2",
+            "b2_elementary",
+            "b3",
+            "b3_naive_llm",
+            "b4",
+            "b4_no_llm",
+        ),
+        default=None,
+    )
     args = parser.parse_args()
-    return run(args.suite, args.report)
+    return run(args.suite, args.report, baseline=args.baseline)
 
 
 if __name__ == "__main__":

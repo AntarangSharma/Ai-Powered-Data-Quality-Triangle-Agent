@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from itertools import pairwise
 
+import pytest
+
 from dq_triage.agent.evidence import ClassifierEvidence
 from dq_triage.classification import Classifier, classify
 from dq_triage.classification.rules import (
@@ -169,3 +171,101 @@ def test_classifier_tiebreaker_silent_when_confident():
     clf = Classifier(tiebreaker=tiebreaker)
     clf.classify(_ev(blame_pk_dupe_count=50))
     assert fired == []
+
+
+# --- 7 New Detectors Unit Tests ------------------------------------------
+
+from dq_triage.classification.rules import (
+    detect_broken_join_fanout,
+    detect_late_arriving,
+    detect_source_schema_change,
+    detect_stale_dimension,
+    detect_type_coercion,
+    detect_unit_encoding_drift,
+    detect_unknown_skew,
+)
+
+
+def test_detect_late_arriving():
+    # Silent if under SLA
+    assert detect_late_arriving(_ev(blame_lag_ratio=0.8)) is None
+    # Triggers if lag exceeds SLA
+    score = detect_late_arriving(_ev(blame_lag_ratio=1.5))
+    assert score is not None
+    assert score.cause_class is RootCauseClass.LATE_ARRIVING
+    assert score.score == pytest.approx(0.8)
+
+
+def test_detect_type_coercion():
+    # Silent if incompatible
+    assert (
+        detect_type_coercion(
+            _ev(blame_integer_compatible_ratio=0.4, blame_float_compatible_ratio=0.5)
+        )
+        is None
+    )
+    # Triggers on integer compatibility
+    score1 = detect_type_coercion(
+        _ev(blame_integer_compatible_ratio=0.98, blame_float_compatible_ratio=0.2)
+    )
+    assert score1 is not None
+    assert score1.cause_class is RootCauseClass.TYPE_COERCION
+    assert score1.score == 0.98
+
+    # Triggers on float compatibility
+    score2 = detect_type_coercion(
+        _ev(blame_integer_compatible_ratio=0.1, blame_float_compatible_ratio=0.96)
+    )
+    assert score2 is not None
+    assert score2.cause_class is RootCauseClass.TYPE_COERCION
+    assert score2.score == 0.96
+
+
+def test_detect_source_schema_change():
+    # Silent if no mismatch
+    assert detect_source_schema_change(_ev(blame_dtype_mismatch=False)) is None
+    # Triggers if mismatch
+    score = detect_source_schema_change(_ev(blame_dtype_mismatch=True))
+    assert score is not None
+    assert score.cause_class is RootCauseClass.SOURCE_SCHEMA_CHANGE
+    assert score.score == 1.0
+
+
+def test_detect_broken_join_fanout():
+    # Silent if no join fanout risk
+    assert detect_broken_join_fanout(_ev(blame_join_fanout_risk=False)) is None
+    # Triggers if fanout risk is present
+    score = detect_broken_join_fanout(_ev(blame_join_fanout_risk=True))
+    assert score is not None
+    assert score.cause_class is RootCauseClass.BROKEN_JOIN_FANOUT
+    assert score.score == 0.9
+
+
+def test_detect_unit_encoding_drift():
+    # Silent if drift is small
+    assert detect_unit_encoding_drift(_ev(blame_value_drift_z=2.5)) is None
+    # Triggers if drift z-score is high
+    score = detect_unit_encoding_drift(_ev(blame_value_drift_z=5.0))
+    assert score is not None
+    assert score.cause_class is RootCauseClass.UNIT_ENCODING_DRIFT
+    assert score.score == pytest.approx(0.8)
+
+
+def test_detect_stale_dimension():
+    # Silent if dimension not stale
+    assert detect_stale_dimension(_ev(blame_stale_dimension=False)) is None
+    # Triggers if stale dimension
+    score = detect_stale_dimension(_ev(blame_stale_dimension=True))
+    assert score is not None
+    assert score.cause_class is RootCauseClass.STALE_DIMENSION
+    assert score.score == 0.9
+
+
+def test_detect_unknown_skew():
+    # Silent if low skew/anomaly
+    assert detect_unknown_skew(_ev(blame_anomaly_score=1.5)) is None
+    # Triggers on high skew
+    score = detect_unknown_skew(_ev(blame_anomaly_score=4.0))
+    assert score is not None
+    assert score.cause_class is RootCauseClass.UNKNOWN
+    assert score.score == pytest.approx(0.7)

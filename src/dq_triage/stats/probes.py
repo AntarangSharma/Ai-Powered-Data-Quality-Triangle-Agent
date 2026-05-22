@@ -22,8 +22,6 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-import duckdb
-
 # ---------------------------------------------------------------------------
 # Identifier safety. DuckDB allows unicode identifiers but our pipelines all
 # use snake_case ASCII — and the only callers are inside our own manifest.
@@ -111,19 +109,23 @@ class FreshnessReading:
 # ---------------------------------------------------------------------------
 
 
-def probe_row_count(con: duckdb.DuckDBPyConnection, table: str) -> int:
+def probe_row_count(con: Any, table: str) -> int:
     """Total row count of `table` (validated identifier)."""
+    if hasattr(con, "probe_row_count"):
+        return con.probe_row_count(table)
     sql = f"SELECT COUNT(*) FROM {_quote_relation(table)}"
     (n,) = con.execute(sql).fetchone()  # type: ignore[misc]
     return int(n)
 
 
-def probe_column_dtype(con: duckdb.DuckDBPyConnection, table: str, column: str) -> str:
+def probe_column_dtype(con: Any, table: str, column: str) -> str:
     """DuckDB-reported SQL type for `table.column`.
 
     Uses `information_schema.columns`. Schema-qualified tables are split.
     Returns the raw DuckDB type string (e.g. "VARCHAR", "INTEGER").
     """
+    if hasattr(con, "probe_column_dtype"):
+        return con.probe_column_dtype(table, column)
     parts = table.split(".")
     if len(parts) == 1:
         schema_clause = ""
@@ -150,9 +152,11 @@ def probe_column_dtype(con: duckdb.DuckDBPyConnection, table: str, column: str) 
     return str(row[0])
 
 
-def probe_column_stats(con: duckdb.DuckDBPyConnection, table: str, column: str) -> ColumnStats:
+def probe_column_stats(con: Any, table: str, column: str) -> ColumnStats:
     """Compute row_count, null_count, distinct_count, dtype for `table.column`
     in one SQL round-trip (plus one for dtype via info schema)."""
+    if hasattr(con, "probe_column_stats"):
+        return con.probe_column_stats(table, column)
     rel = _quote_relation(table)
     col = _quote_ident(column)
     sql = (
@@ -176,7 +180,7 @@ def probe_column_stats(con: duckdb.DuckDBPyConnection, table: str, column: str) 
 
 
 def probe_dupe_count(
-    con: duckdb.DuckDBPyConnection,
+    con: Any,
     table: str,
     key_columns: tuple[str, ...],
     limit: int = 50,
@@ -185,6 +189,8 @@ def probe_dupe_count(
 
     Returns up to `limit` `DupeKey` rows ordered by count descending. Empty
     tuple means the key is unique (or the table is empty)."""
+    if hasattr(con, "probe_dupe_count"):
+        return con.probe_dupe_count(table, key_columns, limit)
     if not key_columns:
         raise ValueError("key_columns must be non-empty")
     cols_sql = ", ".join(_quote_ident(c) for c in key_columns)
@@ -205,12 +211,14 @@ def probe_dupe_count(
 
 
 def probe_freshness(
-    con: duckdb.DuckDBPyConnection,
+    con: Any,
     table: str,
     timestamp_column: str,
     observed_at: datetime,
 ) -> FreshnessReading:
     """Max timestamp in `table.timestamp_column` (== how recent the data is)."""
+    if hasattr(con, "probe_freshness"):
+        return con.probe_freshness(table, timestamp_column, observed_at)
     rel = _quote_relation(table)
     col = _quote_ident(timestamp_column)
     sql = f"SELECT MAX({col}) FROM {rel}"
@@ -234,3 +242,99 @@ def _coerce_datetime(v: object) -> datetime:
     if isinstance(v, date):
         return datetime(v.year, v.month, v.day)
     return datetime.fromisoformat(str(v))
+
+
+def probe_dtype_distribution(con: Any, table: str, column: str) -> tuple[float, float]:
+    """Compute what percentage of non-null values are integer or float compatible in VARCHAR.
+
+    Returns (integer_compatible_ratio, float_compatible_ratio).
+    """
+    if hasattr(con, "probe_dtype_distribution"):
+        return con.probe_dtype_distribution(table, column)
+    dtype = probe_column_dtype(con, table, column).upper()
+    if "VARCHAR" not in dtype and "TEXT" not in dtype and "STRING" not in dtype:
+        return 0.0, 0.0
+    rel = _quote_relation(table)
+    col = _quote_ident(column)
+    sql = (
+        f"SELECT COUNT(*), "
+        f"       SUM(CASE WHEN TRY_CAST({col} AS BIGINT) IS NOT NULL THEN 1 ELSE 0 END), "
+        f"       SUM(CASE WHEN TRY_CAST({col} AS DOUBLE) IS NOT NULL THEN 1 ELSE 0 END) "
+        f"FROM {rel} "
+        f"WHERE {col} IS NOT NULL"
+    )
+    try:
+        row = con.execute(sql).fetchone()
+        if row is None or row[0] is None or row[0] == 0:
+            return 0.0, 0.0
+        total, ints, floats = row
+        return float(ints or 0) / total, float(floats or 0) / total
+    except Exception:
+        return 0.0, 0.0
+
+
+def probe_numeric_moments(con: Any, table: str, column: str) -> tuple[float, float]:
+    """Compute the mean and standard deviation for a numeric column."""
+    if hasattr(con, "probe_numeric_moments"):
+        return con.probe_numeric_moments(table, column)
+    try:
+        dtype = probe_column_dtype(con, table, column).upper()
+        is_numeric = any(
+            t in dtype
+            for t in (
+                "INT",
+                "LONG",
+                "SHORT",
+                "TINY",
+                "FLOAT",
+                "DOUBLE",
+                "DECIMAL",
+                "NUMERIC",
+                "REAL",
+            )
+        )
+        if not is_numeric:
+            return 0.0, 0.0
+        rel = _quote_relation(table)
+        col = _quote_ident(column)
+        sql = f"SELECT AVG(CAST({col} AS DOUBLE)), STDDEV(CAST({col} AS DOUBLE)) FROM {rel}"
+        row = con.execute(sql).fetchone()
+        if row is None:
+            return 0.0, 0.0
+        avg, std = row
+        return float(avg or 0.0), float(std or 0.0)
+    except Exception:
+        return 0.0, 0.0
+
+
+def probe_skew(con: Any, table: str, column: str) -> float:
+    """Compute the skewness of a numeric column."""
+    if hasattr(con, "probe_skew"):
+        return con.probe_skew(table, column)
+    try:
+        dtype = probe_column_dtype(con, table, column).upper()
+        is_numeric = any(
+            t in dtype
+            for t in (
+                "INT",
+                "LONG",
+                "SHORT",
+                "TINY",
+                "FLOAT",
+                "DOUBLE",
+                "DECIMAL",
+                "NUMERIC",
+                "REAL",
+            )
+        )
+        if not is_numeric:
+            return 0.0
+        rel = _quote_relation(table)
+        col = _quote_ident(column)
+        sql = f"SELECT SKEW(CAST({col} AS DOUBLE)) FROM {rel}"
+        row = con.execute(sql).fetchone()
+        if row is None or row[0] is None:
+            return 0.0
+        return float(row[0])
+    except Exception:
+        return 0.0

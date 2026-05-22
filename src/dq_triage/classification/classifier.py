@@ -35,10 +35,12 @@ class Classifier:
         detectors: Sequence[Detector] | None = None,
         tiebreaker: Tiebreaker | None = None,
     ) -> None:
+        from dq_triage.classification.haiku_tiebreaker import haiku_tiebreaker
+
         self.detectors: tuple[Detector, ...] = (
             tuple(detectors) if detectors is not None else ALL_DETECTORS
         )
-        self.tiebreaker = tiebreaker
+        self.tiebreaker = tiebreaker if tiebreaker is not None else haiku_tiebreaker
 
     def classify(self, evidence: ClassifierEvidence) -> tuple[ClassScore, ...]:
         scored: list[ClassScore] = []

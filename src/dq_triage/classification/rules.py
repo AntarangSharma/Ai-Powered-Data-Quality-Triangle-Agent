@@ -89,8 +89,96 @@ def detect_broken_join_dropout(e: ClassifierEvidence) -> ClassScore | None:
     )
 
 
+def detect_late_arriving(e: ClassifierEvidence) -> ClassScore | None:
+    """Triggers when blame lag exceeds the SLA."""
+    if e.blame_lag_ratio <= 1.0:
+        return None
+    score = min(1.0, 0.7 + (e.blame_lag_ratio - 1.0) * 0.2)
+    return ClassScore(
+        cause_class=RootCauseClass.LATE_ARRIVING,
+        score=score,
+        evidence_keys=("blame_lag_ratio",),
+    )
+
+
+def detect_type_coercion(e: ClassifierEvidence) -> ClassScore | None:
+    """Triggers when strings actually contain only integers or floats (improper coercion)."""
+    if e.blame_integer_compatible_ratio < 0.95 and e.blame_float_compatible_ratio < 0.95:
+        return None
+    score = max(e.blame_integer_compatible_ratio, e.blame_float_compatible_ratio)
+    return ClassScore(
+        cause_class=RootCauseClass.TYPE_COERCION,
+        score=score,
+        evidence_keys=("blame_integer_compatible_ratio", "blame_float_compatible_ratio"),
+    )
+
+
+def detect_source_schema_change(e: ClassifierEvidence) -> ClassScore | None:
+    """Triggers when columns mismatch historical / expected types."""
+    if not e.blame_dtype_mismatch:
+        return None
+    return ClassScore(
+        cause_class=RootCauseClass.SOURCE_SCHEMA_CHANGE,
+        score=1.0,
+        evidence_keys=("blame_dtype_mismatch",),
+    )
+
+
+def detect_broken_join_fanout(e: ClassifierEvidence) -> ClassScore | None:
+    """Triggers when duplicate keys are present where uniqueness was expected for joins."""
+    if not e.blame_join_fanout_risk:
+        return None
+    return ClassScore(
+        cause_class=RootCauseClass.BROKEN_JOIN_FANOUT,
+        score=0.9,
+        evidence_keys=("blame_join_fanout_risk",),
+    )
+
+
+def detect_unit_encoding_drift(e: ClassifierEvidence) -> ClassScore | None:
+    """Triggers when numeric distribution shifts dramatically."""
+    if e.blame_value_drift_z <= 3.0:
+        return None
+    score = min(1.0, 0.7 + (e.blame_value_drift_z - 3.0) * 0.05)
+    return ClassScore(
+        cause_class=RootCauseClass.UNIT_ENCODING_DRIFT,
+        score=score,
+        evidence_keys=("blame_value_drift_z",),
+    )
+
+
+def detect_stale_dimension(e: ClassifierEvidence) -> ClassScore | None:
+    """Triggers when fact table is fresh but dimension table is stale."""
+    if not e.blame_stale_dimension:
+        return None
+    return ClassScore(
+        cause_class=RootCauseClass.STALE_DIMENSION,
+        score=0.9,
+        evidence_keys=("blame_stale_dimension",),
+    )
+
+
+def detect_unknown_skew(e: ClassifierEvidence) -> ClassScore | None:
+    """Fallback: triggers when value skew/anomaly score is high but no specific detector fires."""
+    if e.blame_anomaly_score <= 2.0:
+        return None
+    score = min(1.0, 0.5 + (e.blame_anomaly_score - 2.0) * 0.1)
+    return ClassScore(
+        cause_class=RootCauseClass.UNKNOWN,
+        score=score,
+        evidence_keys=("blame_anomaly_score",),
+    )
+
+
 ALL_DETECTORS: tuple[Detector, ...] = (
     detect_upstream_null_spike,
     detect_duplicate_ingestion,
     detect_broken_join_dropout,
+    detect_late_arriving,
+    detect_type_coercion,
+    detect_source_schema_change,
+    detect_broken_join_fanout,
+    detect_unit_encoding_drift,
+    detect_stale_dimension,
+    detect_unknown_skew,
 )

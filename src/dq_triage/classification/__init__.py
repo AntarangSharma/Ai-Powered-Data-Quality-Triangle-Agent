@@ -11,6 +11,7 @@ constructor argument but is not built today.
 """
 
 from dq_triage.classification.classifier import Classifier, classify
+from dq_triage.classification.haiku_tiebreaker import haiku_tiebreaker
 from dq_triage.classification.rules import ALL_DETECTORS, Detector
 
-__all__ = ["ALL_DETECTORS", "Classifier", "Detector", "classify"]
+__all__ = ["ALL_DETECTORS", "Classifier", "Detector", "classify", "haiku_tiebreaker"]

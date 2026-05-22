@@ -101,7 +101,7 @@ def health() -> HealthResponse:
         422: {"description": "Caller specified a test_name that doesn't match any failure."},
     },
 )
-def webhook_dbt_failure(req: TriageRequest) -> Incident:
+def webhook_dbt_failure(req: TriageRequest, notify: str | None = None) -> Incident:
     """Triage a dbt test failure.
 
     Returns the full ``Incident`` payload (Pydantic, frozen). The same
@@ -158,4 +158,16 @@ def webhook_dbt_failure(req: TriageRequest) -> Incident:
         duckdb_path=duckdb_path,
         failing_test=chosen,
     )
+
+    if notify and notify.startswith("slack:"):
+        channel = notify.split(":", 1)[1]
+        try:
+            from dq_triage.narrator import compose, post
+
+            narrated = compose(incident)
+            post(narrated, incident, channel)
+        except Exception:
+            # Prevent notification errors from breaking the main DQ analysis webhook
+            pass
+
     return incident
